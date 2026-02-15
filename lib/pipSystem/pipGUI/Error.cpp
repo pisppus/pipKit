@@ -230,6 +230,9 @@ namespace pipgui
             int16_t hw = 0;
             int16_t hh = 0;
             setPSDFFontSize(px);
+
+            uint16_t prevW = psdfWeight();
+            setPSDFWeight(PSDF_WEIGHT_SEMIBOLD);
             psdfMeasureText(String(header), hw, hh);
 
             int16_t ty = iconY + (int16_t)(iconSize / 2 + 10);
@@ -238,6 +241,7 @@ namespace pipgui
 
             uint16_t headerFg = color888To565((int16_t)(_screenWidth / 2), ty, 0xFFFFFF);
             psdfDrawTextInternal(String(header), (int16_t)(_screenWidth / 2), ty, headerFg, 0, AlignCenter);
+            setPSDFWeight(prevW);
         }
 
         int16_t messageTop = (int16_t)(iconY + (int16_t)iconSize / 2 + 32);

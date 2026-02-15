@@ -172,7 +172,8 @@
         uint16_t _textStyleCaptionPx = 12;
 
         uint16_t _psdfSizePx = 0;
-        float _psdfWeightBias = 0.10f;
+        uint16_t _psdfWeight = 500;
+        float _psdfWeightBias = 0.03f;
         FontId _psdfFontId = WixMadeForDisplay;
 
         struct ErrorEntry

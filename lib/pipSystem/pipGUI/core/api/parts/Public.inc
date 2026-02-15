@@ -189,6 +189,8 @@
         bool psdfEnabled() const;
         void setPSDFFontSize(uint16_t px);
         uint16_t psdfFontSize() const;
+        void setPSDFWeight(uint16_t weight);
+        uint16_t psdfWeight() const;
         void setPSDFWeightBias(float bias);
         float psdfWeightBias() const;
         void setPSDFFont(FontId fontId);

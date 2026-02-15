@@ -693,6 +693,7 @@ namespace pipgui
             uint16_t subPx = m.style.subtitleFontPx;
             uint16_t gapPx = m.style.lineGapPx;
 
+            uint16_t prevW = psdfWeight();
             {
                 if (titlePx == 0)
                     titlePx = hasSub ? 18 : 20;
@@ -709,11 +710,13 @@ namespace pipgui
                     gapPx = 0;
                 }
 
+                setPSDFWeight(PSDF_WEIGHT_MEDIUM);
                 setPSDFFontSize(titlePx);
                 psdfMeasureText(title, titleW, titleH);
 
                 if (hasSub && subPx > 0)
                 {
+                    setPSDFWeight(PSDF_WEIGHT_MEDIUM);
                     setPSDFFontSize(subPx);
                     psdfMeasureText(sub, subW, subH);
                 }
@@ -757,6 +760,7 @@ namespace pipgui
                 int16_t titleX = centerX - titleW / 2;
                 int16_t subX = centerX - subW / 2;
 
+                setPSDFWeight(PSDF_WEIGHT_MEDIUM);
                 setPSDFFontSize(titlePx);
                 {
                     uint16_t bg565 = color888To565(titleX, tyTitle, bg);
@@ -766,6 +770,7 @@ namespace pipgui
 
                 if (hasSub && subPx > 0)
                 {
+                    setPSDFWeight(PSDF_WEIGHT_MEDIUM);
                     setPSDFFontSize(subPx);
                     {
                         uint16_t bg565 = color888To565(subX, tySub, bg);
@@ -773,6 +778,8 @@ namespace pipgui
                         psdfDrawTextInternal(sub, subX, tySub, fg565, bg565, AlignLeft);
                     }
                 }
+
+                setPSDFWeight(prevW);
             }
         }
     }

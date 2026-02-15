@@ -3270,7 +3270,7 @@ void screenFontCompareDemo(GUI &ui)
 
 
 
-    const float weights[4] = {-0.25f, 0.0f, 0.18f, 0.45f};
+    const uint16_t weights[4] = {400, 500, 600, 700};
 
 
 
@@ -3319,17 +3319,6 @@ void screenFontCompareDemo(GUI &ui)
 
 
       ui.setPSDFFontSize(sizes[i]);
-
-
-
-
-
-
-
-      ui.setPSDFWeightBias(weights[i]);
-
-
-
 
 
 

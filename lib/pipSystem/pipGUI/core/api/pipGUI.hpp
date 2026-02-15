@@ -114,6 +114,14 @@ namespace pipgui
         Caption
     };
 
+    static constexpr uint16_t PSDF_WEIGHT_THIN = 100;
+    static constexpr uint16_t PSDF_WEIGHT_LIGHT = 300;
+    static constexpr uint16_t PSDF_WEIGHT_REGULAR = 400;
+    static constexpr uint16_t PSDF_WEIGHT_MEDIUM = 500;
+    static constexpr uint16_t PSDF_WEIGHT_SEMIBOLD = 600;
+    static constexpr uint16_t PSDF_WEIGHT_BOLD = 700;
+    static constexpr uint16_t PSDF_WEIGHT_BLACK = 900;
+
     static constexpr int16_t center = -1;
 
     enum StatusBarPosition : uint8_t

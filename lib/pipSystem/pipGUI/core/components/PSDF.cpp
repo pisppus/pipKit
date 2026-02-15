@@ -264,6 +264,37 @@ namespace pipgui
         return _psdfSizePx;
     }
 
+    static inline float weightToBias(uint16_t weight)
+    {
+        // Pseudo-weight via shifting the SDF threshold.
+        // 500 (Medium) is default.
+        // Tuned so 400 is thinner and 600/700 clearly bolder.
+        int w = (int)weight;
+        if (w < 100)
+            w = 100;
+        if (w > 900)
+            w = 900;
+
+        float t = (float)(w - 500) / 300.0f; // ~[-1.33..+1.33] from 100..900
+        float bias = 0.03f + t * 0.18f;      // more pronounced weight steps
+        if (bias < -0.20f)
+            bias = -0.20f;
+        if (bias > 0.25f)
+            bias = 0.25f;
+        return bias;
+    }
+
+    void GUI::setPSDFWeight(uint16_t weight)
+    {
+        _psdfWeight = weight;
+        _psdfWeightBias = weightToBias(weight);
+    }
+
+    uint16_t GUI::psdfWeight() const
+    {
+        return _psdfWeight;
+    }
+
     void GUI::setPSDFWeightBias(float bias)
     {
         _psdfWeightBias = bias;
@@ -819,6 +850,7 @@ namespace pipgui
             for (int16_t py = iy0; py < iy1; ++py)
             {
                 float v = ((float)(py - ry) + 0.5f) * invSize;
+                v = 1.0f - v;
                 float sy = (float)srcY + (float)srcH * v;
 
                 int32_t row = (int32_t)py * (int32_t)stride;
@@ -856,6 +888,7 @@ namespace pipgui
         {
             int16_t py = (int16_t)(ry + (int16_t)dy);
             float v = ((float)dy + 0.5f) * invSize;
+            v = 1.0f - v;
             float sy = (float)srcY + (float)srcH * v;
 
             for (uint16_t dx = 0; dx < sizePx; ++dx)
