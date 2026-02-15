@@ -1,5 +1,4 @@
 #include <pipGUI/core/api/pipGUI.hpp>
-#include <pipGUI/core/GuiDebug.hpp>
 #include <math.h>
 #include <algorithm>
 #include <cstdint>
@@ -269,18 +268,21 @@ namespace pipgui
         if (el >= dur)
         {
             _flags.screenTransition = 0;
-            return;
+            _currentScreen = _screenTo;
+            _flags.needRedraw = 0;
+            freeScreenTransitionSprites();
         }
-        renderNotificationOverlay();
     }
 
     void GUI::loop()
     {
         uint32_t now = nowMs();
 
+        // Update debug metrics periodically
+        Debug::update();
+
         tickRecovery(now);
         tickDebugDirtyOverlay(now);
-        GuiDebug::tick(*this, now);
 
         // Update FRC seed for temporal dithering (if enabled)
         if (_frcTemporalPeriodMs)
@@ -295,50 +297,49 @@ namespace pipgui
 
         if (_flags.bootActive)
         {
-            Debug::frameStart();
+            Debug::beginRender();
             renderBootFrame(now);
-            Debug::frameEnd();
+            Debug::endRender();
             return;
         }
         if (_flags.errorActive)
         {
-            Debug::frameStart();
+            Debug::beginRender();
             renderErrorFrame(now);
             if (_flags.notifActive)
                 renderNotificationOverlay();
-            Debug::frameEnd();
+            Debug::endRender();
             return;
         }
         if (_flags.screenTransition)
         {
-            Debug::frameStart();
+            Debug::beginRender();
             renderScreenTransition(now);
             if (_flags.notifActive)
                 renderNotificationOverlay();
-            Debug::frameEnd();
+            Debug::endRender();
             return;
         }
 
         if (_flags.notifActive && _flags.spriteEnabled)
         {
-            Debug::frameStart();
             if (_currentScreen < _screenCapacity && _screens && _screens[_currentScreen])
             {
+                Debug::beginRender();
                 _flags.renderToSprite = 1;
                 clear(_bgColor);
                 _screens[_currentScreen](*this);
 
                 _flags.renderToSprite = 0;
                 renderStatusBar(true);
+                Debug::endRender();
             }
             renderNotificationOverlay();
-            Debug::frameEnd();
             return;
         }
 
         if (_flags.needRedraw && _currentScreen < _screenCapacity && _screens && _screens[_currentScreen])
         {
-            Debug::frameStart();
             _flags.needRedraw = 0;
             if (_flags.spriteEnabled)
             {
@@ -347,14 +348,16 @@ namespace pipgui
                     ListMenuState *lm = getListMenu(_currentScreen);
                     if (lm && lm->configured && lm->itemCount > 0)
                     {
+                        Debug::beginRender();
                         bool more = updateListMenu(_currentScreen);
                         updateStatusBar();
+                        Debug::endRender();
                         if (more)
                             _flags.needRedraw = 1;
-                        Debug::frameEnd();
                         return;
                     }
 
+                    Debug::beginRender();
                     _flags.renderToSprite = 1;
                     clear(_bgColor);
                     _screens[_currentScreen](*this);
@@ -363,6 +366,7 @@ namespace pipgui
                     renderStatusBar(true);
                     if (_display)
                         _sprite.writeToDisplay(*_display, 0, 0, (int16_t)_screenWidth, (int16_t)_screenHeight);
+                    Debug::endRender();
                     _dirtyCount = 0;
                 }
                 else
@@ -376,7 +380,6 @@ namespace pipgui
                 _screens[_currentScreen](*this);
                 renderStatusBar(false);
             }
-            Debug::frameEnd();
         }
 
         if (_flags.notifActive && !_flags.spriteEnabled)

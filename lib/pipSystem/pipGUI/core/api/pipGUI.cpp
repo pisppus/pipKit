@@ -1,6 +1,5 @@
 #include <pipGUI/core/api/pipGUI.hpp>
 #include <pipGUI/core/Debug.hpp>
-#include <pipGUI/core/GuiDebug.hpp>
 #include <math.h>
 
 namespace pipgui
@@ -386,8 +385,13 @@ namespace pipgui
     void GUI::setDebugStatusBarMetrics(bool enabled)
     {
         _flags.statusBarDebugMetrics = enabled;
-        GuiDebug::setStatusBarMetricsEnabled(*this, enabled);
+        Debug::setMetricsStatusBarEnabled(enabled);
+        if (enabled)
+        {
+            Debug::init();
+        }
         _statusBarDirtyMask = StatusBarDirtyAll;
+        requestRedraw(); // Force redraw to recalculate layout
     }
 
 }

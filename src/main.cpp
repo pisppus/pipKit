@@ -115,6 +115,8 @@ void screenPrimitivesDemo(GUI &ui);
 
 void screenGradientsDemo(GUI &ui);
 
+void screenFontWeightDemo(GUI &ui);
+
 void screenMain(GUI &ui)
 
 {
@@ -469,13 +471,11 @@ void screenProgressDemo(GUI &ui)
 
   ui.drawProgressBar(center, 88, 200, 10, g_progressValue, ui.rgb(10, 10, 10), ui.rgb(255, 0, 72), 6, None);
 
-  ui.drawTextProgress(center, 102, 200, 16, g_progressValue, String(g_progressValue) + "%", ui.rgb(10, 10, 10), ui.rgb(255, 128, 0), ui.rgb(235, 235, 235), 6, AlignCenter);
-
   ui.drawCircularProgressBar(50, 165, 22, 8, 0, ui.rgb(10, 10, 10), ui.rgb(0, 87, 250), Indeterminate);
 
   ui.drawCircularProgressBar(105, 165, 22, 8, g_progressValue, ui.rgb(10, 10, 10), ui.rgb(255, 0, 72), None);
 
-  ui.drawCircularProgressBar(160, 165, 22, 8, g_progressValue, ui.rgb(10, 10, 10), ui.rgb(255, 128, 0), Shimmer);
+  ui.drawCircularProgressBar(160, 165, 22, 8, g_progressValue, ui.rgb(10, 10, 10), ui.rgb(255, 128, 0), Stripes);
 
   ui.drawCircularProgressBar(215, 165, 22, 8, g_progressValue, ui.rgb(10, 10, 10), ui.rgb(0, 200, 120), Shimmer);
 }
@@ -505,14 +505,6 @@ void screenPrimitivesDemo(GUI &ui)
   ui.fillTriangle(220, 72, 250, 40, 280, 72, ui.rgb(0, 200, 120));
 
   ui.drawTriangle(220, 72, 250, 40, 280, 72, ui.rgb(255, 255, 255));
-
-  ui.fillTriangle(220, 120, 250, 90, 280, 120, 6, ui.rgb(80, 255, 120));
-
-  ui.drawTriangle(220, 120, 250, 90, 280, 120, 6, ui.rgb(255, 255, 255));
-
-  ui.fillRoundRect(10, 110, 120, 46, CornerRadii{12, 0, 12, 0}, ui.rgb(21, 54, 140));
-
-  ui.drawRoundRect(10, 110, 120, 46, CornerRadii{12, 0, 12, 0}, ui.rgb(255, 255, 255));
 
   ui.fillSquircle(70, 135, 26, ui.rgb(255, 128, 0));
 
@@ -934,6 +926,46 @@ void screenFontCompareDemo(GUI &ui)
   }
 }
 
+void screenFontWeightDemo(GUI &ui)
+{
+  uint32_t bg = ui.rgb(10, 10, 10);
+  ui.clear(bg);
+
+  int16_t w = (int16_t)ui.screenWidth();
+
+  if (ui.psdfFontLoaded())
+  {
+    ui.enablePSDF(true);
+    
+    uint16_t prevWeight = ui.psdfWeight();
+    
+    ui.setPSDFFontSize(16);
+    ui.drawPSDFText("Font Weight Test", (int16_t)(w / 2), 10, ui.rgb(255, 255, 0), bg, AlignCenter);
+
+    const String sample = "The quick brown fox";
+    const uint16_t weights[] = {100, 300, 400, 500, 600, 700, 900};
+    const char* labels[] = {"Thin 100", "Light 300", "Regular 400", "Medium 500", "SemiBold 600", "Bold 700", "Black 900"};
+    
+    int16_t y = 35;
+    int16_t spacing = 38;
+
+    for (int i = 0; i < 7; ++i)
+    {
+      ui.setPSDFFontSize(12);
+      ui.setPSDFWeight(400);
+      ui.drawPSDFText(String(labels[i]), 8, y, ui.rgb(150, 150, 150), bg, AlignLeft);
+      
+      ui.setPSDFFontSize(20);
+      ui.setPSDFWeight(weights[i]);
+      ui.drawPSDFText(sample, 8, (int16_t)(y + 14), ui.rgb(255, 255, 255), bg, AlignLeft);
+      
+      y += spacing;
+    }
+    
+    ui.setPSDFWeight(prevWeight);
+  }
+}
+
 void setup()
 
 {
@@ -1056,6 +1088,8 @@ void setup()
 
   ui.regScreen(25, screenGradientsDemo);
 
+  ui.regScreen(26, screenFontWeightDemo);
+
   ui.configureListMenu(
 
       7,
@@ -1113,6 +1147,8 @@ void setup()
           {"Gradients", "Gradients + fillRectAlpha", 25},
 
           {"Font compare", "PSDF", 24},
+
+          {"Font weights", "Test all weights", 26},
 
       });
 
@@ -1287,6 +1323,10 @@ void setup()
       0, 0, 0, 0,
 
       TextOnly);
+
+  // Invalidate menu caches to apply new font weights
+  ui.invalidateListMenuCache(7);
+  ui.invalidateListMenuCache(10);
 
   ui.setScreen(7);
 }
@@ -1616,15 +1656,13 @@ void loop()
 
       ui.updateProgressBar(center, 74, 200, 10, g_progressValue, ui.rgb(10, 10, 10), ui.rgb(255, 0, 72), 6, None);
 
-      ui.updateProgressBar(center, 88, 200, 10, g_progressValue, ui.rgb(10, 10, 10), ui.rgb(255, 128, 0), 6, Shimmer);
-
-      ui.updateTextProgress(center, 102, 200, 16, g_progressValue, String(g_progressValue) + "%", ui.rgb(10, 10, 10), ui.rgb(255, 128, 0), ui.rgb(235, 235, 235), 6, AlignCenter);
+      ui.updateProgressBar(center, 88, 200, 10, g_progressValue, ui.rgb(10, 10, 10), ui.rgb(255, 128, 0), 6, Stripes);
 
       ui.updateCircularProgressBar(50, 165, 22, 8, 0, ui.rgb(10, 10, 10), ui.rgb(0, 87, 250), Indeterminate);
 
       ui.updateCircularProgressBar(105, 165, 22, 8, g_progressValue, ui.rgb(10, 10, 10), ui.rgb(255, 0, 72), None);
 
-      ui.updateCircularProgressBar(160, 165, 22, 8, g_progressValue, ui.rgb(10, 10, 10), ui.rgb(255, 128, 0), Shimmer);
+      ui.updateCircularProgressBar(160, 165, 22, 8, g_progressValue, ui.rgb(10, 10, 10), ui.rgb(255, 128, 0), Stripes);
 
       ui.updateCircularProgressBar(215, 165, 22, 8, g_progressValue, ui.rgb(10, 10, 10), ui.rgb(0, 200, 120), Shimmer);
     }

@@ -222,9 +222,12 @@ namespace pipgui
             int16_t mW = 0;
             int16_t mH = 0;
 
+            uint16_t prevW = psdfWeight();
+            setPSDFWeight(PSDF_WEIGHT_SEMIBOLD);
             setPSDFFontSize(titleSz);
             psdfMeasureText(_notifTitle, tW, tH);
 
+            setPSDFWeight(PSDF_WEIGHT_MEDIUM);
             setPSDFFontSize(msgSz);
             psdfMeasureText(_notifMessage, mW, mH);
 
@@ -240,6 +243,7 @@ namespace pipgui
             uint16_t bg565Title = color888To565((int16_t)(cardX + (cardW - tW) / 2), startY, cardColor);
             uint16_t fg565Title = color888To565((int16_t)(cardX + (cardW - tW) / 2), startY, titleColor);
 
+            setPSDFWeight(PSDF_WEIGHT_SEMIBOLD);
             setPSDFFontSize(titleSz);
             psdfDrawTextInternal(_notifTitle,
                                 cardX + (cardW - tW) / 2,
@@ -248,6 +252,7 @@ namespace pipgui
                                 bg565Title,
                                 AlignLeft);
 
+            setPSDFWeight(PSDF_WEIGHT_MEDIUM);
             setPSDFFontSize(msgSz);
 
             int16_t msgX = (int16_t)(cardX + (cardW - mW) / 2);
@@ -261,6 +266,7 @@ namespace pipgui
                                 bg565Msg,
                                 AlignLeft);
 
+            setPSDFWeight(prevW);
             _flags.renderToSprite = prevRenderText;
             _activeSprite = prevActiveText;
 

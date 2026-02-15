@@ -714,8 +714,13 @@ namespace pipgui
         if (_currentScreen >= _screenCapacity)
             return;
         GraphArea &area = ensureGraphArea(_currentScreen);
-        int16_t pad = 2;
-        invalidateRect((int16_t)(area.innerX - pad), (int16_t)(area.innerY - pad), (int16_t)(area.innerW + pad * 2), (int16_t)(area.innerH + pad * 2));
+        
+        // Invalidate entire graph inner area
+        // The graph redraws its entire background in drawGraphLine(), so we need to
+        // invalidate the whole area to ensure all pixels are sent to the display
+        int16_t pad = 1;
+        invalidateRect((int16_t)(area.innerX - pad), (int16_t)(area.innerY - pad), 
+                      (int16_t)(area.innerW + pad * 2), (int16_t)(area.innerH + pad * 2));
         flushDirty();
     }
 }

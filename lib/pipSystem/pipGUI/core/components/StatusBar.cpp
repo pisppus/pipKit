@@ -171,9 +171,28 @@ namespace pipgui
         if (_statusBarDirtyMask == 0)
             return;
 
+        // Update debug metrics if enabled
+        if (_flags.statusBarDebugMetrics)
+        {
+            Debug::update();
+            // Always mark as dirty when debug metrics are enabled to update values
+            // And invalidate the entire status bar to avoid flickering
+            _statusBarDirtyMask = StatusBarDirtyAll;
+        }
+
         DirtyRect bar = calcBarRect();
         if (bar.w <= 0 || bar.h <= 0)
         {
+            _statusBarDirtyMask = 0;
+            return;
+        }
+
+        // In debug metrics mode, always redraw the entire status bar
+        if (_flags.statusBarDebugMetrics)
+        {
+            invalidateRect(bar.x, bar.y, bar.w, bar.h);
+            renderStatusBar(true);
+            // Don't flush here - let the main loop handle it
             _statusBarDirtyMask = 0;
             return;
         }
@@ -493,6 +512,58 @@ namespace pipgui
         }
 
         fillRect(x, y, w, h, bg888);
+        
+        // If debug metrics mode is enabled, only render metrics and skip normal content
+        if (_flags.statusBarDebugMetrics)
+        {
+            int16_t textH = 0;
+            {
+                uint16_t px = (h > 6) ? (uint16_t)(h - 4) : (uint16_t)h;
+                if (px < 8)
+                    px = 8;
+                setPSDFFontSize(px);
+                int16_t tmpW = 0;
+                psdfMeasureText(String("Ag"), tmpW, textH);
+                if (textH <= 0 || textH > h)
+                    textH = h;
+            }
+
+            int16_t baseY = y + (h - textH) / 2;
+            if (baseY < y)
+                baseY = y;
+
+            auto measureText = [&](const String &s) -> int16_t
+            {
+                if (!s.length())
+                    return 0;
+                int16_t tw = 0;
+                int16_t th = 0;
+                psdfMeasureText(s, tw, th);
+                return tw;
+            };
+
+            auto drawTextAt = [&](const String &s, int16_t tx)
+            {
+                if (!s.length())
+                    return;
+                uint16_t fg565 = color888To565(tx, baseY, fg888);
+                uint16_t bg565 = color888To565(tx, baseY, bg888);
+                psdfDrawTextInternal(s, tx, baseY, fg565, bg565, AlignLeft);
+            };
+
+            char metricsText[64];
+            Debug::formatStatusBar(metricsText, sizeof(metricsText));
+            int16_t tw = measureText(String(metricsText));
+            int16_t mx = x + (w - tw) / 2;
+            if (mx < x + 2) mx = x + 2;
+            drawTextAt(String(metricsText), mx);
+
+            _flags.renderToSprite = prevRender;
+            _activeSprite = prevActive;
+            return;
+        }
+        
+        // Normal status bar rendering
         int16_t textH = 0;
 
         {

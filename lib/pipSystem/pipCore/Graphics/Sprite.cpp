@@ -160,6 +160,37 @@ namespace pipcore
         if (dy0 + h > dstH)
             h = static_cast<int16_t>(dstH - dy0);
 
+        int16_t clipX = dst->_clipX;
+        int16_t clipY = dst->_clipY;
+        int16_t clipW = dst->_clipW;
+        int16_t clipH = dst->_clipH;
+        if (clipW < 0)
+            clipW = 0;
+        if (clipH < 0)
+            clipH = 0;
+
+        int16_t clipX2 = static_cast<int16_t>(clipX + clipW);
+        int16_t clipY2 = static_cast<int16_t>(clipY + clipH);
+
+        if (dx0 < clipX)
+        {
+            int16_t d = static_cast<int16_t>(clipX - dx0);
+            sx0 = static_cast<int16_t>(sx0 + d);
+            w = static_cast<int16_t>(w - d);
+            dx0 = clipX;
+        }
+        if (dy0 < clipY)
+        {
+            int16_t d = static_cast<int16_t>(clipY - dy0);
+            sy0 = static_cast<int16_t>(sy0 + d);
+            h = static_cast<int16_t>(h - d);
+            dy0 = clipY;
+        }
+        if (dx0 + w > clipX2)
+            w = static_cast<int16_t>(clipX2 - dx0);
+        if (dy0 + h > clipY2)
+            h = static_cast<int16_t>(clipY2 - dy0);
+
         if (w <= 0 || h <= 0)
             return;
 
