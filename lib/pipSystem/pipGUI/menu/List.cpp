@@ -332,6 +332,17 @@ namespace pipgui
         }
     }
 
+    void GUI::invalidateListMenuCache(uint8_t screenId)
+    {
+        ListMenuState *pm = getListMenu(screenId);
+        if (!pm)
+            return;
+        
+        clearListMenuCache(*pm, _platform);
+        pm->cacheValid = false;
+        requestRedraw();
+    }
+
     void GUI::renderListMenu(uint8_t screenId)
     {
         int16_t left = 0, right = _screenWidth, top = 0, bottom = _screenHeight;
@@ -572,11 +583,13 @@ namespace pipgui
             int16_t subW = 0;
             int16_t subH = 0;
 
+            uint16_t prevW = psdfWeight();
             setPSDFFontSize(titlePx);
             psdfMeasureText(title, titleW, titleH);
 
             if (hasSub && subPx > 0)
             {
+                setPSDFWeight(PSDF_WEIGHT_MEDIUM);
                 setPSDFFontSize(subPx);
                 psdfMeasureText(sub, subW, subH);
             }
@@ -603,10 +616,12 @@ namespace pipgui
 
             if (hasSub && subPx > 0)
             {
+                setPSDFWeight(PSDF_WEIGHT_MEDIUM);
                 setPSDFFontSize(subPx);
                 psdfDrawTextInternal(sub, txLocal, tySubLocal, subCol, bg, AlignLeft);
             }
 
+            setPSDFWeight(prevW);
             _flags.renderToSprite = prevRender;
             _activeSprite = prevActive;
 
@@ -673,6 +688,7 @@ namespace pipgui
 
             int16_t titleW = 0;
             int16_t titleH = 0;
+            uint16_t prevW = psdfWeight();
             setPSDFFontSize(titlePx);
             psdfMeasureText(title, titleW, titleH);
 
@@ -689,6 +705,7 @@ namespace pipgui
             setPSDFFontSize(titlePx);
             psdfDrawTextInternal(title, txLocal, baseY, txtCol, bg, AlignLeft);
 
+            setPSDFWeight(prevW);
             _flags.renderToSprite = prevRender;
             _activeSprite = prevActive;
 
@@ -757,6 +774,7 @@ namespace pipgui
 
                 int16_t titleW = 0;
                 int16_t titleH = 0;
+                uint16_t prevW = psdfWeight();
                 setPSDFFontSize(titlePx);
                 psdfMeasureText(title, titleW, titleH);
                 int16_t baseY = yy + (int16_t)((cardH - titleH) / 2);
@@ -766,6 +784,7 @@ namespace pipgui
 
                 setPSDFFontSize(titlePx);
                 psdfDrawTextInternal(title, tx, baseY, txtCol, bg, AlignLeft);
+                setPSDFWeight(prevW);
 
                 continue;
             }
@@ -814,11 +833,13 @@ namespace pipgui
             int16_t subW = 0;
             int16_t subH = 0;
 
+            uint16_t prevW = psdfWeight();
             setPSDFFontSize(titlePx);
             psdfMeasureText(title, titleW, titleH);
 
             if (hasSub && subPx > 0)
             {
+                setPSDFWeight(PSDF_WEIGHT_MEDIUM);
                 setPSDFFontSize(subPx);
                 psdfMeasureText(sub, subW, subH);
             }
@@ -840,9 +861,12 @@ namespace pipgui
 
             if (hasSub && subPx > 0)
             {
+                setPSDFWeight(PSDF_WEIGHT_MEDIUM);
                 setPSDFFontSize(subPx);
                 psdfDrawTextInternal(sub, tx, tySub, subCol, bg, AlignLeft);
             }
+
+            setPSDFWeight(prevW);
         }
 
         const uint32_t SHOW_MS = 400;

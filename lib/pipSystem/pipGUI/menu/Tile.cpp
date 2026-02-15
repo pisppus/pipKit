@@ -710,13 +710,11 @@ namespace pipgui
                     gapPx = 0;
                 }
 
-                setPSDFWeight(PSDF_WEIGHT_MEDIUM);
                 setPSDFFontSize(titlePx);
                 psdfMeasureText(title, titleW, titleH);
 
                 if (hasSub && subPx > 0)
                 {
-                    setPSDFWeight(PSDF_WEIGHT_MEDIUM);
                     setPSDFFontSize(subPx);
                     psdfMeasureText(sub, subW, subH);
                 }
@@ -760,7 +758,6 @@ namespace pipgui
                 int16_t titleX = centerX - titleW / 2;
                 int16_t subX = centerX - subW / 2;
 
-                setPSDFWeight(PSDF_WEIGHT_MEDIUM);
                 setPSDFFontSize(titlePx);
                 {
                     uint16_t bg565 = color888To565(titleX, tyTitle, bg);
@@ -770,7 +767,6 @@ namespace pipgui
 
                 if (hasSub && subPx > 0)
                 {
-                    setPSDFWeight(PSDF_WEIGHT_MEDIUM);
                     setPSDFFontSize(subPx);
                     {
                         uint16_t bg565 = color888To565(subX, tySub, bg);

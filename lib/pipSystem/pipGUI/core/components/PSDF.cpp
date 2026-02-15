@@ -267,20 +267,28 @@ namespace pipgui
     static inline float weightToBias(uint16_t weight)
     {
         // Pseudo-weight via shifting the SDF threshold.
-        // 500 (Medium) is default.
-        // Tuned so 400 is thinner and 600/700 clearly bolder.
+        // 400 (Regular) is default (bias = 0.0).
+        // Increased multiplier for more pronounced weight differences.
         int w = (int)weight;
         if (w < 100)
             w = 100;
         if (w > 900)
             w = 900;
 
-        float t = (float)(w - 500) / 300.0f; // ~[-1.33..+1.33] from 100..900
-        float bias = 0.03f + t * 0.18f;      // more pronounced weight steps
+        // Changed baseline from 500 to 400 (Regular)
+        // Increased multiplier from 0.18 to 0.25 for stronger effect
+        // 300 -> bias = -0.083 (light, noticeably thinner)
+        // 400 -> bias = 0.0 (regular, neutral baseline)
+        // 500 -> bias = 0.083 (medium, clearly bolder)
+        // 600 -> bias = 0.167 (semibold, strong)
+        // 700 -> bias = 0.25 (bold, very strong)
+        // 900 -> bias = 0.25 (black, capped at max)
+        float t = (float)(w - 400) / 300.0f; // ~[-1.0..+1.67] from 100..900
+        float bias = t * 0.25f;              // stronger weight steps
         if (bias < -0.20f)
             bias = -0.20f;
-        if (bias > 0.25f)
-            bias = 0.25f;
+        if (bias > 0.30f)
+            bias = 0.30f;
         return bias;
     }
 

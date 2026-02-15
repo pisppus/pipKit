@@ -165,7 +165,7 @@
 
         uint16_t _psdfSizePx = 0;
         uint16_t _psdfWeight = 500;
-        float _psdfWeightBias = 0.03f;
+        float _psdfWeightBias = 0.083f;
         FontId _psdfFontId = WixMadeForDisplay;
 
         struct ErrorEntry
