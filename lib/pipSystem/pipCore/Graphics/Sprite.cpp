@@ -211,6 +211,29 @@ namespace pipcore
             return;
         if (w <= 0 || h <= 0)
             return;
-        display.writeRect565(x, y, w, h, _buf + static_cast<size_t>(y) * static_cast<size_t>(_w) + static_cast<size_t>(x), _w);
+
+        int16_t x0 = x;
+        int16_t y0 = y;
+        int16_t x1 = x + w - 1;
+        int16_t y1 = y + h - 1;
+
+        if (x0 < 0)
+            x0 = 0;
+        if (y0 < 0)
+            y0 = 0;
+        if (x1 >= _w)
+            x1 = static_cast<int16_t>(_w - 1);
+        if (y1 >= _h)
+            y1 = static_cast<int16_t>(_h - 1);
+
+        if (x0 > x1 || y0 > y1)
+            return;
+
+        int16_t clippedW = static_cast<int16_t>(x1 - x0 + 1);
+        int16_t clippedH = static_cast<int16_t>(y1 - y0 + 1);
+
+        const uint16_t *pixels = _buf + static_cast<size_t>(y0) * static_cast<size_t>(_w) + static_cast<size_t>(x0);
+
+        display.writeRect565(x0, y0, clippedW, clippedH, pixels, _w);
     }
 }

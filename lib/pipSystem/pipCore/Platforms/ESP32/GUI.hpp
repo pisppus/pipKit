@@ -10,6 +10,7 @@
 #include <Preferences.h>
 
 #include <pipCore/Displays/ST7789/Display.hpp>
+#include <pipCore/Platforms/ESP32/St7789Spi.hpp>
 
 namespace pipcore
 {
@@ -17,6 +18,7 @@ namespace pipcore
     {
     public:
         Esp32GuiPlatform() = default;
+        ~Esp32GuiPlatform();
 
         void ioPinModeInput(uint8_t pin, bool pullup) override;
         bool ioDigitalRead(uint8_t pin) override;
@@ -44,6 +46,8 @@ namespace pipcore
         uint8_t _backlightChannel = 0;
         uint8_t _backlightResolution = 12;
 
+        // ESP32-specific SPI transport for ST7789
+        Esp32St7789Spi *_transport = nullptr;
         ST7789Display _display;
         bool _displayConfigured = false;
     };
