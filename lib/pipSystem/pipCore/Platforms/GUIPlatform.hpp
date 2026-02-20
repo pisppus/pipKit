@@ -21,11 +21,14 @@ namespace pipcore
         int8_t cs = -1;
         int8_t dc = -1;
         int8_t rst = -1;
-        int8_t miso = -1;
         uint16_t width = 0;
         uint16_t height = 0;
         uint32_t hz = 0;
-        bool bgr = false;
+        uint8_t order = 0; // 0 = RGB (default), 1 = BGR
+        bool invert = true;
+        bool swap = false;
+        int16_t xOffset = 0;
+        int16_t yOffset = 0;
     };
 
     class GuiPlatform

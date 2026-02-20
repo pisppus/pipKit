@@ -4,6 +4,16 @@
 
 namespace pipcore
 {
+    Esp32GuiPlatform::~Esp32GuiPlatform()
+    {
+        // Transport will be cleaned up by display destructor or manually
+        if (_transport)
+        {
+            delete _transport;
+            _transport = nullptr;
+        }
+    }
+
     void Esp32GuiPlatform::ioPinModeInput(uint8_t pin, bool pullup)
     {
         pinMode(pin, pullup ? INPUT_PULLUP : INPUT);
@@ -96,8 +106,26 @@ namespace pipcore
         if (cfg.width == 0 || cfg.height == 0)
             return false;
 
-        _display.configure(cfg.mosi, cfg.sclk, cfg.cs, cfg.dc, cfg.rst,
-                           cfg.width, cfg.height, cfg.hz, cfg.miso, cfg.bgr);
+        // Clean up existing transport if reconfiguring
+        if (_transport)
+        {
+            delete _transport;
+            _transport = nullptr;
+        }
+
+        // Create ESP32 SPI transport with configuration
+        _transport = new Esp32St7789Spi(
+            cfg.mosi, cfg.sclk, cfg.cs, cfg.dc, cfg.rst, cfg.hz);
+
+        // Configure display with the transport
+        bool ok = _display.configure(_transport, cfg.width, cfg.height, cfg.order, cfg.invert, cfg.swap, cfg.xOffset, cfg.yOffset);
+        if (!ok)
+        {
+            delete _transport;
+            _transport = nullptr;
+            return false;
+        }
+
         _displayConfigured = true;
         return true;
     }

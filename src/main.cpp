@@ -1,9 +1,10 @@
-#include <Arduino.h>
+﻿#include <Arduino.h>
 #include <SPIFFS.h>
 #include <math.h>
 #include <pipGUI/core/api/pipGUI.hpp>
 #include <pipGUI/icons/metrics.hpp>
 #include <pipCore/Platforms/ESP32/GUI.hpp>
+#include <pipCore/Displays/ST7789/Display.hpp>
 using namespace pipgui;
 
 GUI ui;
@@ -1221,7 +1222,12 @@ void setup()
 
   ui.setPlatform(&g_platform);
 
-  ui.configureDisplay(11, 12, 10, 9, -1, 240, 320);
+
+  ui.configureDisplay()
+      .pins({11, 12, 10, 9, 14})
+      .hz(80000000)
+      .size(240, 320)
+      .apply();
 
   ui.begin(3, 0);
 

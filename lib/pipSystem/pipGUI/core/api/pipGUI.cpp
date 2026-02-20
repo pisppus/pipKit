@@ -235,21 +235,30 @@ namespace pipgui
         }
     }
 
-    void GUI::configureDisplay(int8_t mosi, int8_t sclk, int8_t cs, int8_t dc, int8_t rst, uint16_t w, uint16_t h, uint32_t hz, bool bgr)
+    ConfigureDisplayFluent GUI::configureDisplay()
     {
-        _displayCfg.mosi = mosi;
-        _displayCfg.sclk = sclk;
-        _displayCfg.cs = cs;
-        _displayCfg.dc = dc;
-        _displayCfg.rst = rst;
-        _displayCfg.miso = -1;
-        _displayCfg.width = w;
-        _displayCfg.height = h;
-        _displayCfg.hz = hz;
-        _displayCfg.bgr = bgr;
+        return ConfigureDisplayFluent(this);
+    }
+
+    void GUI::configureDisplay(const pipcore::GuiDisplayConfig &cfg)
+    {
+        _displayCfg = cfg;
+        if (_displayCfg.hz == 0)
+            _displayCfg.hz = 80000000;
+
         _displayCfgConfigured = true;
         if (pipcore::GuiPlatform *plat = platform())
             plat->guiConfigureDisplay(_displayCfg);
+    }
+
+    void ConfigureDisplayFluent::apply()
+    {
+        if (_consumed)
+            return;
+        _consumed = true;
+        if (!_gui)
+            return;
+        _gui->configureDisplay(_cfg);
     }
 
     void GUI::begin(uint8_t rotation, uint16_t bgColor)

@@ -17,6 +17,28 @@
 namespace pipgui
 {
 
+    struct DisplayPins
+    {
+        int8_t mosi = -1;
+        int8_t sclk = -1;
+        int8_t cs = -1;
+        int8_t dc = -1;
+        int8_t rst = -1;
+
+        constexpr DisplayPins(int8_t mosi_,
+                              int8_t sclk_,
+                              int8_t cs_,
+                              int8_t dc_,
+                              int8_t rst_ = -1)
+            : mosi(mosi_),
+              sclk(sclk_),
+              cs(cs_),
+              dc(dc_),
+              rst(rst_) {}
+
+        constexpr DisplayPins() = default;
+    };
+
     namespace detail
     {
         static inline void *guiAlloc(pipcore::GuiPlatform *plat, size_t bytes, pipcore::GuiAllocCaps caps) noexcept
@@ -544,6 +566,101 @@ namespace pipgui
         TileLayoutCell *layout = nullptr;
         Item *items = nullptr;
         uint8_t itemCapacity = 0;
+    };
+
+    struct ConfigureDisplayFluent
+    {
+        GUI *_gui;
+        pipcore::GuiDisplayConfig _cfg;
+        bool _consumed;
+
+        ConfigureDisplayFluent(GUI *g) : _gui(g), _cfg(), _consumed(false)
+        {
+            _cfg.mosi = -1;
+            _cfg.sclk = -1;
+            _cfg.cs = -1;
+            _cfg.dc = -1;
+            _cfg.rst = -1;
+            _cfg.width = 0;
+            _cfg.height = 0;
+            _cfg.hz = 80000000;
+            _cfg.order = 0;
+            _cfg.invert = true;
+            _cfg.swap = false;
+        }
+
+        ConfigureDisplayFluent &pins(const DisplayPins &p)
+        {
+            if (_consumed)
+                return *this;
+            _cfg.mosi = p.mosi;
+            _cfg.sclk = p.sclk;
+            _cfg.cs = p.cs;
+            _cfg.dc = p.dc;
+            _cfg.rst = p.rst;
+            return *this;
+        }
+
+        ConfigureDisplayFluent &pins(int8_t mosi, int8_t sclk, int8_t cs, int8_t dc, int8_t rst)
+        {
+            if (_consumed)
+                return *this;
+            _cfg.mosi = mosi;
+            _cfg.sclk = sclk;
+            _cfg.cs = cs;
+            _cfg.dc = dc;
+            _cfg.rst = rst;
+            return *this;
+        }
+
+        ConfigureDisplayFluent &size(uint16_t w, uint16_t h)
+        {
+            if (_consumed)
+                return *this;
+            _cfg.width = w;
+            _cfg.height = h;
+            return *this;
+        }
+
+        ConfigureDisplayFluent &hz(uint32_t v)
+        {
+            if (_consumed)
+                return *this;
+            _cfg.hz = v;
+            return *this;
+        }
+
+        ConfigureDisplayFluent &order(const char *v)
+        {
+            if (_consumed)
+                return *this;
+            if (!v)
+                return *this;
+
+            if ((v[0] == 'B' || v[0] == 'b') && (v[1] == 'G' || v[1] == 'g') && (v[2] == 'R' || v[2] == 'r') && v[3] == 0)
+                _cfg.order = 1;
+            else
+                _cfg.order = 0;
+            return *this;
+        }
+
+        ConfigureDisplayFluent &invert(bool v = true)
+        {
+            if (_consumed)
+                return *this;
+            _cfg.invert = v;
+            return *this;
+        }
+
+        ConfigureDisplayFluent &swap(bool v = true)
+        {
+            if (_consumed)
+                return *this;
+            _cfg.swap = v;
+            return *this;
+        }
+
+        void apply();
     };
 
 #define PIPGUI_FLUENT_BUILDERS_INC 1
