@@ -1,11 +1,11 @@
-﻿// Toast notification: short-lived message sliding in from top or bottom with Bezier easing.
+// Toast notification: short-lived message sliding in from top or bottom with Bezier easing.
 // Renders on top of all content (including alert dialog if any).
 
 #include <pipGUI/core/api/pipGUI.hpp>
 
 namespace pipgui
 {
-    // Cubic Bezier ease-out вЂ” smooth decelerate into position (softer than 0.18/0.99)
+    // Cubic Bezier ease-out — smooth decelerate into position (softer than 0.18/0.99)
     static float bezierEaseOut(float t)
     {
         if (t <= 0.0f)
@@ -18,7 +18,7 @@ namespace pipgui
         return 3.0f * uu * t * 0.22f + 3.0f * u * tt * 0.92f + tt * t;
     }
 
-    // Ease-in for exit вЂ” smooth accelerate off-screen (smoothstep)
+    // Ease-in for exit — smooth accelerate off-screen (smoothstep)
     static float bezierEaseIn(float t)
     {
         if (t <= 0.0f)
@@ -145,7 +145,7 @@ namespace pipgui
             int16_t iconX = (int16_t)(boxX + padH);
             int16_t iconY = (int16_t)(boxY + (boxH - iconSide) / 2);
             drawIcon()
-                .at(iconX, iconY)
+                .pos(iconX, iconY)
                 .size((uint16_t)iconSide)
                 .icon(_toast.iconId)
                 .color(0xFFFF)

@@ -16,7 +16,8 @@ struct BlurRegionFluentT
     bool _consumed;
     BlurRegionFluentT(GUI *g)
         : _gui(g), _x(0), _y(0), _w(0), _h(0), _radius(0), _dir(TopDown), _gradient(true), _materialStrength(32), _noiseAmount(8), _materialColor(-1), _consumed(false) {}
-    BlurRegionFluentT &at(int16_t x, int16_t y)
+    ~BlurRegionFluentT() { draw(); }
+    BlurRegionFluentT &pos(int16_t x, int16_t y)
     {
         PIPGUI_FLUENT_GUARD(BlurRegionFluentT<IsUpdate>);
         _x = x;
@@ -85,7 +86,8 @@ struct GlowCircleFluentT
     bool _consumed;
     GlowCircleFluentT(GUI *g)
         : _gui(g), _x(0), _y(0), _r(0), _fillColor(0), _bgColor(-1), _glowColor(-1), _glowSize(12), _glowStrength(220), _anim(None), _pulsePeriodMs(1000), _consumed(false) {}
-    GlowCircleFluentT &at(int16_t x, int16_t y)
+    ~GlowCircleFluentT() { draw(); }
+    GlowCircleFluentT &pos(int16_t x, int16_t y)
     {
         PIPGUI_FLUENT_GUARD(GlowCircleFluentT<IsUpdate>);
         _x = x;
@@ -177,7 +179,8 @@ struct GlowRectFluentT
           _fillColor(0), _bgColor(-1), _glowColor(-1),
           _glowSize(12), _glowStrength(220), _anim(None), _pulsePeriodMs(1000),
           _perCorner(false), _consumed(false) {}
-    GlowRectFluentT &at(int16_t x, int16_t y)
+    ~GlowRectFluentT() { if (!_consumed) draw(); }
+    GlowRectFluentT &pos(int16_t x, int16_t y)
     {
         PIPGUI_FLUENT_GUARD(GlowRectFluentT<IsUpdate>);
         _x = x;

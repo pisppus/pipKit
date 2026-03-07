@@ -1,4 +1,4 @@
-﻿#include <pipGUI/core/api/pipGUI.hpp>
+#include <pipGUI/core/api/pipGUI.hpp>
 #include <pipGUI/core/utils/Colors.hpp>
 #include <math.h>
 
@@ -63,7 +63,7 @@ namespace pipgui
 
             for (int16_t rrInt = innerR; rrInt <= outerR; ++rrInt)
                 g.drawArc()
-                    .at(cx, cy)
+                    .pos(cx, cy)
                     .radius(rrInt)
                     .startDeg(g0)
                     .endDeg(g1)
@@ -99,7 +99,7 @@ namespace pipgui
             int16_t px = (int16_t)lroundf((float)cx + cosf(rad) * rMid);
             int16_t py = (int16_t)lroundf((float)cy + sinf(rad) * rMid);
             uint16_t col = colorAtAngle(deg);
-            g.fillCircle().at(px, py).radius(capR).color(col).draw();
+            g.fillCircle().pos(px, py).radius(capR).color(col).draw();
         };
 
         drawCapAt(startDeg);
@@ -171,24 +171,10 @@ namespace pipgui
 
         if (x == center)
         {
-            int16_t left = 0;
             int16_t availW = _render.screenWidth;
-            int16_t sb = statusBarHeight();
-            if (_flags.statusBarEnabled && sb > 0)
-            {
-                if (_status.pos == Left)
-                {
-                    left += sb;
-                    availW -= sb;
-                }
-                else if (_status.pos == Right)
-                {
-                    availW -= sb;
-                }
-            }
             if (availW < w)
                 availW = w;
-            x = left + (availW - w) / 2;
+            x = (availW - w) / 2;
         }
         if (y == center)
         {
@@ -478,22 +464,8 @@ namespace pipgui
 
         if (cx == center)
         {
-            int16_t left = 0;
             int16_t availW = _render.screenWidth;
-            int16_t sb = statusBarHeight();
-            if (_flags.statusBarEnabled && sb > 0)
-            {
-                if (_status.pos == Left)
-                {
-                    left += sb;
-                    availW -= sb;
-                }
-                else if (_status.pos == Right)
-                {
-                    availW -= sb;
-                }
-            }
-            cx = left + availW / 2;
+            cx = availW / 2;
         }
 
         if (cy == center)
@@ -648,7 +620,7 @@ namespace pipgui
         _render.activeSprite = &_render.sprite;
 
         fillRect()
-            .at((int16_t)(rx - pad), (int16_t)(ry - pad))
+            .pos((int16_t)(rx - pad), (int16_t)(ry - pad))
             .size((int16_t)(w + pad * 2), (int16_t)(h + pad * 2))
             .color(detail::color888To565(_render.bgColor))
             .draw();
@@ -721,7 +693,7 @@ namespace pipgui
             _render.activeSprite = &_render.sprite;
 
             fillRect()
-                .at((int16_t)(rx - pad), (int16_t)(ry - pad))
+                .pos((int16_t)(rx - pad), (int16_t)(ry - pad))
                 .size((int16_t)(w + pad * 2), (int16_t)(h + pad * 2))
                 .color(detail::color888To565(_render.bgColor))
                 .draw();
@@ -778,7 +750,7 @@ namespace pipgui
         _render.activeSprite = &_render.sprite;
 
         fillRect()
-            .at(cx, (int16_t)(ry - pad))
+            .pos(cx, (int16_t)(ry - pad))
             .size(cw, (int16_t)(h + pad * 2))
             .color(detail::color888To565(_render.bgColor))
             .draw();
@@ -832,7 +804,7 @@ namespace pipgui
         int16_t pad = 2;
         int16_t rr = (int16_t)(r + pad);
         fillRect()
-            .at((int16_t)(cx - rr), (int16_t)(cy - rr))
+            .pos((int16_t)(cx - rr), (int16_t)(cy - rr))
             .size((int16_t)(rr * 2 + 1), (int16_t)(rr * 2 + 1))
             .color(detail::color888To565(_render.bgColor))
             .draw();
@@ -857,5 +829,4 @@ namespace pipgui
         updateCircularProgressBar(x, y, r, thickness, value, base, color, anim, doFlush);
     }
 }
-
 

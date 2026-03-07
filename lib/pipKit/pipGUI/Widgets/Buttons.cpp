@@ -1,4 +1,4 @@
-﻿#include <pipGUI/core/api/pipGUI.hpp>
+#include <pipGUI/core/api/pipGUI.hpp>
 
 namespace pipgui
 {
@@ -297,7 +297,7 @@ namespace pipgui
         _render.activeSprite = &_render.sprite;
 
         fillRect()
-            .at((int16_t)(rx - pad), (int16_t)(ry - pad))
+            .pos((int16_t)(rx - pad), (int16_t)(ry - pad))
             .size((int16_t)(w + pad * 2), (int16_t)(h + pad * 2))
             .color(detail::color888To565(_render.bgColor))
             .draw();

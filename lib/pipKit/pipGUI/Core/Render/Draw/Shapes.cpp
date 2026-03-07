@@ -1,6 +1,4 @@
 #include <pipGUI/core/api/pipGUI.hpp>
-#include <pipGUI/core/Debug.hpp>
-#include <pipGUI/core/utils/Colors.hpp>
 #include <pipCore/Graphics/Sprite.hpp>
 #include <math.h>
 #include "Blend.hpp"

@@ -3,1338 +3,756 @@
 #include <math.h>
 #include <new>
 #include <utility>
-#include <cassert>
-#include <limits>
 #include <cstring>
 
 namespace pipgui
 {
-    static inline uint16_t autoTextColor565List(uint16_t bg, uint8_t threshold = 140)
+
+    static void resetListItemCache(ListState::Item &item)
     {
-        uint32_t r8 = ((bg >> 11) & 0x1F) * 255U / 31U;
-        uint32_t g8 = ((bg >> 5) & 0x3F) * 255U / 63U;
-        uint32_t b8 = (bg & 0x1F) * 255U / 31U;
-        uint32_t lum = (r8 * 54U + g8 * 183U + b8 * 18U) >> 8;
-        return (lum > threshold) ? (uint16_t)0x0000 : (uint16_t)0xFFFF;
+        item.titleW = item.titleH = item.subW = item.subH = 0;
+        item.cachedTitlePx = item.cachedSubPx = 0;
+        item.cachedTitleWeight = item.cachedSubWeight = 0;
     }
 
-    static void clearListMenuCache(ListMenuState &m, pipcore::GuiPlatform *plat)
+    static void resetListRuntime(ListState &menu)
     {
-        if (m.cacheNormal)
-        {
-            for (uint8_t i = 0; i < m.capacity; ++i)
-            {
-                if (m.cacheNormal[i])
-                {
-                    detail::guiFree(plat, m.cacheNormal[i]);
-                    m.cacheNormal[i] = nullptr;
-                }
-            }
-        }
-
-        if (m.cacheActive)
-        {
-            for (uint8_t i = 0; i < m.capacity; ++i)
-            {
-                if (m.cacheActive[i])
-                {
-                    detail::guiFree(plat, m.cacheActive[i]);
-                    m.cacheActive[i] = nullptr;
-                }
-            }
-        }
-
-        m.cacheW = 0;
-        m.cacheH = 0;
-        m.cacheValid = false;
-
-        m.viewportValid = false;
+        menu.selectedIndex = 0;
+        menu.scrollPos = menu.targetScroll = menu.scrollVel = 0.0f;
+        menu.nextHoldStartMs = menu.prevHoldStartMs = 0;
+        menu.nextLongFired = menu.prevLongFired = false;
+        menu.lastNextDown = menu.lastPrevDown = false;
+        menu.scrollbarAlpha = 0;
+        menu.lastScrollActivityMs = menu.lastUpdateMs = 0;
     }
 
-    static bool ensureListMenuCapacity(ListMenuState &m, uint8_t newCapacity, pipcore::GuiPlatform *plat)
+    static bool initListItem(ListState::Item &item, const ListItemDef &def)
+    {
+        item.title = def.title ? String(def.title) : String();
+        item.subtitle = def.subtitle ? String(def.subtitle) : String();
+        item.targetScreen = def.targetScreen;
+        item.iconId = def.iconId;
+        resetListItemCache(item);
+
+        return (!def.title || item.title.length() > 0 || strlen(def.title) == 0) &&
+               (!def.subtitle || item.subtitle.length() > 0 || strlen(def.subtitle) == 0);
+    }
+
+    static pipcore::Sprite *ensureListViewport(ListState &menu,
+                                               pipcore::GuiPlatform *plat,
+                                               int16_t w,
+                                               int16_t h)
+    {
+        if (!menu.viewportSprite)
+        {
+            void *mem = detail::guiAlloc(plat, sizeof(pipcore::Sprite), pipcore::GuiAllocCaps::Default);
+            if (mem)
+                menu.viewportSprite = new (mem) pipcore::Sprite();
+        }
+
+        pipcore::Sprite *viewport = menu.viewportSprite;
+        if (!viewport)
+            return nullptr;
+
+        if (viewport->getBuffer() && viewport->width() == w && viewport->height() == h)
+            return viewport;
+
+        viewport->deleteSprite();
+        if (viewport->createSprite(w, h))
+            return viewport;
+
+        viewport->deleteSprite();
+        viewport->~Sprite();
+        detail::guiFree(plat, viewport);
+        menu.viewportSprite = nullptr;
+        return nullptr;
+    }
+
+    static void destroyList(ListState &menu, pipcore::GuiPlatform *plat)
+    {
+        if (menu.viewportSprite)
+        {
+            menu.viewportSprite->deleteSprite();
+            menu.viewportSprite->~Sprite();
+            detail::guiFree(plat, menu.viewportSprite);
+            menu.viewportSprite = nullptr;
+        }
+
+        if (menu.items)
+        {
+            for (uint8_t i = 0; i < menu.capacity; ++i)
+                menu.items[i].~Item();
+            detail::guiFree(plat, menu.items);
+        }
+        menu = {};
+        menu.parentScreen = INVALID_SCREEN_ID;
+    }
+
+    static bool ensureListCapacity(ListState &menu, uint8_t newCapacity, pipcore::GuiPlatform *plat)
     {
         if (newCapacity == 0)
         {
-            clearListMenuCache(m, plat);
-
-            if (m.items)
-            {
-                using ListItem = pipgui::ListMenuState::Item;
-                for (uint8_t i = 0; i < m.capacity; ++i)
-                    m.items[i].~ListItem();
-                detail::guiFree(plat, m.items);
-                m.items = nullptr;
-            }
-            if (m.cacheNormal)
-            {
-                detail::guiFree(plat, m.cacheNormal);
-                m.cacheNormal = nullptr;
-            }
-            if (m.cacheActive)
-            {
-                detail::guiFree(plat, m.cacheActive);
-                m.cacheActive = nullptr;
-            }
-
-            if (m.viewportSprite)
-            {
-                m.viewportSprite->deleteSprite();
-                m.viewportSprite->~Sprite();
-                detail::guiFree(plat, m.viewportSprite);
-                m.viewportSprite = nullptr;
-            }
-            m.viewportValid = false;
-            m.capacity = 0;
+            destroyList(menu, plat);
             return true;
         }
 
-        if (m.capacity >= newCapacity && m.items && m.cacheNormal && m.cacheActive)
+        if (menu.capacity >= newCapacity && menu.items)
             return true;
 
-        clearListMenuCache(m, plat);
-
-        ListMenuState::Item *newItems = (ListMenuState::Item *)detail::guiAlloc(plat, sizeof(ListMenuState::Item) * newCapacity, pipcore::GuiAllocCaps::Default);
-        uint16_t **newCacheNormal = (uint16_t **)detail::guiAlloc(plat, sizeof(uint16_t *) * newCapacity, pipcore::GuiAllocCaps::Default);
-        uint16_t **newCacheActive = (uint16_t **)detail::guiAlloc(plat, sizeof(uint16_t *) * newCapacity, pipcore::GuiAllocCaps::Default);
-
-        if (!newItems || !newCacheNormal || !newCacheActive)
-        {
-            if (newItems)
-                detail::guiFree(plat, newItems);
-            if (newCacheNormal)
-                detail::guiFree(plat, newCacheNormal);
-            if (newCacheActive)
-                detail::guiFree(plat, newCacheActive);
+        const size_t itemSize = sizeof(ListState::Item);
+        if ((size_t)newCapacity > SIZE_MAX / itemSize)
             return false;
-        }
+
+        ListState::Item *newItems = (ListState::Item *)detail::guiAlloc(plat, itemSize * newCapacity, pipcore::GuiAllocCaps::Default);
+        if (!newItems)
+            return false;
 
         for (uint8_t i = 0; i < newCapacity; ++i)
-            new (&newItems[i]) ListMenuState::Item();
+            new (&newItems[i]) ListState::Item();
 
-        for (uint8_t i = 0; i < newCapacity; ++i)
-        {
-            newCacheNormal[i] = nullptr;
-            newCacheActive[i] = nullptr;
-        }
+        uint8_t toCopy = 0;
+        if (menu.items && menu.itemCount > 0)
+            toCopy = (menu.itemCount < newCapacity) ? menu.itemCount : newCapacity;
 
-        uint8_t toCopy = (m.items && m.itemCount < newCapacity) ? m.itemCount : (m.items ? newCapacity : 0);
         for (uint8_t i = 0; i < toCopy; ++i)
+            newItems[i] = std::move(menu.items[i]);
+
+        if (menu.items)
         {
-            newItems[i] = std::move(m.items[i]);
+            for (uint8_t i = 0; i < menu.capacity; ++i)
+                menu.items[i].~Item();
+            detail::guiFree(plat, menu.items);
         }
 
-        if (m.items)
-        {
-            using ListItem = pipgui::ListMenuState::Item;
-            for (uint8_t i = 0; i < m.capacity; ++i)
-                m.items[i].~ListItem();
-            detail::guiFree(plat, m.items);
-        }
-        if (m.cacheNormal)
-            detail::guiFree(plat, m.cacheNormal);
-        if (m.cacheActive)
-            detail::guiFree(plat, m.cacheActive);
-
-        m.items = newItems;
-        m.cacheNormal = newCacheNormal;
-        m.cacheActive = newCacheActive;
-        m.capacity = newCapacity;
+        menu.items = newItems;
+        menu.capacity = newCapacity;
         return true;
     }
 
-    void GUI::configureListMenu(uint8_t screenId, uint8_t parentScreen, const ListMenuItemDef *items, uint8_t itemCount)
+    void ConfigureListFluent::apply()
     {
-        if (screenId == INVALID_SCREEN_ID || !items || itemCount == 0)
+        if (_consumed || !_items || _itemCount == 0)
             return;
-        ListMenuState *m = ensureListMenu(screenId);
-        if (!m) return;
-        if (!ensureListMenuCapacity(*m, itemCount, platform()))
+        _consumed = true;
+
+        if (_screenId == INVALID_SCREEN_ID)
             return;
-
-        clearListMenuCache(*m, platform());
-
-        m->configured = true;
-        m->parentScreen = parentScreen;
-        m->itemCount = itemCount;
-        m->selectedIndex = 0;
-        m->scrollPos = 0.0f;
-        m->targetScroll = 0.0f;
-        m->nextHoldStartMs = 0;
-        m->prevHoldStartMs = 0;
-        m->nextLongFired = false;
-        m->prevLongFired = false;
-        m->lastNextDown = false;
-        m->lastPrevDown = false;
-        m->scrollbarAlpha = 0;
-        m->lastScrollActivityMs = 0;
-
-        for (uint8_t i = 0; i < itemCount; ++i)
+        ListState *menu = _gui->ensureList(_screenId);
+        if (!menu)
+            return;
+        if (!ensureListCapacity(*menu, _itemCount, _gui->platform()))
         {
-            m->items[i].title = items[i].title ? String(items[i].title) : String("");
-            m->items[i].subtitle = items[i].subtitle ? String(items[i].subtitle) : String("");
-            m->items[i].targetScreen = items[i].targetScreen;
+            menu->configured = false;
+            return;
         }
 
-        if (m->style.cardColor == 0 && m->style.cardActiveColor == 0)
+        menu->configured = true;
+        menu->parentScreen = _parentScreen;
+        menu->itemCount = _itemCount;
+        resetListRuntime(*menu);
+
+        for (uint8_t i = 0; i < _itemCount; ++i)
         {
-            uint32_t base888 = _render.bgColor ? _render.bgColor : 0x000000;
-            uint16_t base565 = detail::color888To565(base888);
-            m->style.cardColor = (uint16_t)detail::blend565(base565, (uint16_t)0xFFFF, 18);
-            m->style.cardActiveColor = rgb(0, 130, 220);
-            m->style.radius = 10;
-            m->style.spacing = 10;
+            if (!initListItem(menu->items[i], _items[i]))
+            {
+                menu->configured = false;
+                return;
+            }
+        }
+
+        menu->style = {_cardColor, _cardActiveColor, _radius, 6,
+                       _cardWidth, _cardHeight, 0, 0, 0, _mode};
+
+        if (menu->style.cardColor == 0 || menu->style.cardActiveColor == 0)
+        {
+            uint16_t bg565 = (uint16_t)0x0000;
+            menu->style.cardColor = (uint16_t)detail::blend565(bg565, (uint16_t)0xFFFF, 18);
+            menu->style.cardActiveColor = (uint16_t)((0 << 11) | ((130 >> 2) << 5) | (220 >> 3));
         }
     }
 
-    void GUI::configureListMenu(uint8_t screenId, uint8_t parentScreen, std::initializer_list<ListMenuItemDef> items)
+    void GUI::handleListInput(uint8_t screenId, bool, bool, bool nextDown, bool prevDown)
     {
-        if (items.size() == 0)
+        ListState *menuPtr = getList(screenId);
+        if (!menuPtr)
+            return;
+        ListState &menu = *menuPtr;
+        if (!menu.configured || menu.itemCount == 0)
             return;
 
-        configureListMenu(screenId,
-                          parentScreen,
-                          items.begin(),
-                          static_cast<uint8_t>(items.size()));
-    }
-
-    void GUI::setListMenuStyle(uint8_t screenId,
-                               uint32_t cardColor,
-                               uint32_t cardActiveColor,
-                               uint8_t spacing,
-                               uint8_t radius,
-                               int16_t cardWidth,
-                               int16_t cardHeight,
-                               uint16_t titleFontPx,
-                               uint16_t subtitleFontPx,
-                               uint16_t lineGapPx,
-                               ListMenuMode mode)
-    {
-        if (screenId == INVALID_SCREEN_ID)
-            return;
-        ListMenuState *m = ensureListMenu(screenId);
-        if (!m) return;
-
-        clearListMenuCache(*m, platform());
-
-        m->style.cardColor = detail::color888To565(cardColor);
-        m->style.cardActiveColor = detail::color888To565(cardActiveColor);
-        m->style.spacing = spacing;
-        m->style.radius = radius;
-        m->style.cardWidth = cardWidth;
-        m->style.cardHeight = cardHeight;
-        m->style.titleFontPx = titleFontPx;
-        m->style.subtitleFontPx = subtitleFontPx;
-        m->style.lineGapPx = lineGapPx;
-        m->style.mode = mode;
-    }
-
-    void GUI::handleListMenuInput(uint8_t screenId, bool nextPressed, bool prevPressed, bool nextDown, bool prevDown)
-    {
-        (void)nextPressed;
-        (void)prevPressed;
-
-        ListMenuState *pm = getListMenu(screenId);
-        if (!pm)
-            return;
-        ListMenuState &m = *pm;
-        if (!m.configured || m.itemCount == 0)
-            return;
-
-        uint32_t now = nowMs();
+        const uint32_t now = nowMs();
         bool changed = false;
-
-        const uint32_t ENTER_HOLD_MS = 400;
-        const uint32_t BACK_HOLD_MS = 400;
+        const uint32_t holdMs = 400;
 
         if (nextDown)
         {
-            if (!m.lastNextDown)
+            if (!menu.lastNextDown)
             {
-                m.nextHoldStartMs = now;
-                m.nextLongFired = false;
+                menu.nextHoldStartMs = now;
+                menu.nextLongFired = false;
             }
-            else if (!m.nextLongFired && m.nextHoldStartMs && (now - m.nextHoldStartMs) >= ENTER_HOLD_MS)
+            else if (!menu.nextLongFired && menu.nextHoldStartMs && (now - menu.nextHoldStartMs) >= holdMs)
             {
-                if (m.selectedIndex < m.itemCount)
+                if (menu.selectedIndex < menu.itemCount)
                 {
-                    uint8_t target = m.items[m.selectedIndex].targetScreen;
+                    uint8_t target = menu.items[menu.selectedIndex].targetScreen;
                     if (target != INVALID_SCREEN_ID)
                         setScreen(target);
                 }
-                m.nextLongFired = true;
+                menu.nextLongFired = true;
             }
         }
         else
         {
-            if (m.lastNextDown && !m.nextLongFired)
+            if (menu.lastNextDown && !menu.nextLongFired)
             {
-                if (m.itemCount > 0)
-                {
-                    if (m.selectedIndex + 1 < m.itemCount)
-                        m.selectedIndex++;
-                    else
-                        m.selectedIndex = 0;
-                    changed = true;
-                }
+                if (menu.selectedIndex + 1 < menu.itemCount)
+                    menu.selectedIndex++;
+                else
+                    menu.selectedIndex = 0;
+                changed = true;
             }
 
-            m.nextHoldStartMs = 0;
-            m.nextLongFired = false;
+            menu.nextHoldStartMs = 0;
+            menu.nextLongFired = false;
         }
 
         if (prevDown)
         {
-            if (!m.lastPrevDown)
+            if (!menu.lastPrevDown)
             {
-                m.prevHoldStartMs = now;
-                m.prevLongFired = false;
+                menu.prevHoldStartMs = now;
+                menu.prevLongFired = false;
             }
-            else if (!m.prevLongFired && m.prevHoldStartMs && (now - m.prevHoldStartMs) >= BACK_HOLD_MS)
+            else if (!menu.prevLongFired && menu.prevHoldStartMs && (now - menu.prevHoldStartMs) >= holdMs)
             {
-                if (m.parentScreen != INVALID_SCREEN_ID)
-                    setScreen(m.parentScreen);
-                m.prevLongFired = true;
+                if (menu.parentScreen != INVALID_SCREEN_ID)
+                    setScreen(menu.parentScreen);
+                menu.prevLongFired = true;
             }
         }
         else
         {
-            if (m.lastPrevDown && !m.prevLongFired)
+            if (menu.lastPrevDown && !menu.prevLongFired)
             {
-                if (m.itemCount > 0)
-                {
-                    if (m.selectedIndex > 0)
-                        m.selectedIndex--;
-                    else
-                        m.selectedIndex = m.itemCount - 1;
-                    changed = true;
-                }
+                if (menu.selectedIndex > 0)
+                    menu.selectedIndex--;
+                else
+                    menu.selectedIndex = menu.itemCount - 1;
+                changed = true;
             }
 
-            m.prevHoldStartMs = 0;
-            m.prevLongFired = false;
+            menu.prevHoldStartMs = 0;
+            menu.prevLongFired = false;
         }
 
-        m.lastNextDown = nextDown;
-        m.lastPrevDown = prevDown;
+        menu.lastNextDown = nextDown;
+        menu.lastPrevDown = prevDown;
 
         if (changed)
         {
-            m.scrollbarAlpha = 255;
-            m.lastScrollActivityMs = now;
+            menu.scrollbarAlpha = 255;
+            menu.lastScrollActivityMs = now;
             requestRedraw();
         }
     }
 
-    void GUI::invalidateListMenuCache(uint8_t screenId)
+    bool GUI::updateList(uint8_t screenId)
     {
-        ListMenuState *pm = getListMenu(screenId);
-        if (!pm)
-            return;
-
-        clearListMenuCache(*pm, _disp.platform);
-        pm->cacheValid = false;
-        requestRedraw();
-    }
-
-    void GUI::renderListMenu(uint8_t screenId)
-    {
-        int16_t left = 0, right = _render.screenWidth, top = 0, bottom = _render.screenHeight;
-        int16_t sb = statusBarHeight();
-        if (_flags.statusBarEnabled && sb > 0 && _status.style == StatusBarStyleSolid)
-        {
-            if (_status.pos == Top)
-                top += sb;
-            else if (_status.pos == Bottom)
-                bottom -= sb;
-            else if (_status.pos == Left)
-                left += sb;
-            else if (_status.pos == Right)
-                right -= sb;
-        }
-        int16_t w = right - left;
-        int16_t h = bottom - top;
-        if (w <= 0 || h <= 0)
-            return;
-
-        renderListMenu(screenId, left, top, w, h, _render.bgColor);
-    }
-
-    void GUI::renderListMenu(uint8_t screenId, int16_t x, int16_t y, int16_t w, int16_t h, uint32_t bgColor)
-    {
-        ListMenuState *pm = getListMenu(screenId);
-        if (!pm)
-            return;
-        ListMenuState &m = *pm;
-        if (!m.configured || m.itemCount == 0)
-            return;
-
-        if (w <= 0 || h <= 0)
-            return;
-
-        const uint16_t bgColor565 = detail::color888To565(bgColor);
-
-        auto t = getDrawTarget();
-        uint32_t now = nowMs();
-
-        int16_t left = x;
-        int16_t right = x + w;
-        int16_t top = y;
-        int16_t bottom = y + h;
-
-        int16_t usableW = w;
-        int16_t usableH = h;
-        int16_t contentTop = top + 4;
-
-        int16_t marginX = 5;
-
-        const bool cardMode = (m.style.mode == Cards);
-        const bool plainMode = (m.style.mode == Plain);
-
-        int16_t cardW;
-        if (m.style.cardWidth > 0 && m.style.cardWidth < usableW)
-            cardW = m.style.cardWidth;
-        else
-            cardW = usableW - marginX * 2;
-        if (cardW > usableW)
-            cardW = usableW;
-        if (cardW < 20)
-            cardW = 20;
-
-        int16_t cardH;
-        if (m.style.cardHeight > 0)
-            cardH = m.style.cardHeight;
-        else
-            cardH = cardMode ? 50 : 34;
-        if (m.style.cardHeight <= 0 && cardH * 2 + m.style.spacing > usableH)
-            cardH = usableH / 3;
-
-        int16_t cx = left + (usableW - cardW) / 2;
-
-        int32_t clipX = 0, clipY = 0, clipW = 0, clipH = 0;
-        t->getClipRect(&clipX, &clipY, &clipW, &clipH);
-
-        int32_t bgL = left;
-        int32_t bgT = top;
-        int32_t bgR = right;
-        int32_t bgB = bottom;
-
-        if (clipW > 0 && clipH > 0)
-        {
-            int32_t cR = clipX + clipW;
-            int32_t cB = clipY + clipH;
-
-            if (bgL < clipX)
-                bgL = clipX;
-            if (bgT < clipY)
-                bgT = clipY;
-            if (bgR > cR)
-                bgR = cR;
-            if (bgB > cB)
-                bgB = cB;
-        }
-
-        int32_t bgW = bgR - bgL;
-        int32_t bgH = bgB - bgT;
-        if (bgW > 0 && bgH > 0)
-            t->fillRect((int16_t)bgL, (int16_t)bgT, (int16_t)bgW, (int16_t)bgH, bgColor565);
-
-        int16_t visibleHeight = bottom - contentTop;
-        if (visibleHeight < cardH)
-            visibleHeight = cardH;
-
-        float itemSpan = (float)(cardH + m.style.spacing);
-        uint8_t visibleCount = 1;
-        if (itemSpan > 1.0f)
-        {
-            if (visibleHeight > cardH)
-            {
-                int16_t extra = (int16_t)(visibleHeight - cardH);
-                uint8_t additional = (uint8_t)(extra / (int16_t)itemSpan);
-                visibleCount = (uint8_t)(1 + additional);
-            }
-            if (visibleCount < 1)
-                visibleCount = 1;
-            if (visibleCount > m.itemCount)
-                visibleCount = m.itemCount;
-        }
-
-        float maxScroll = 0.0f;
-        if (m.itemCount > visibleCount)
-            maxScroll = (float)(m.itemCount - visibleCount);
-
-        float targetTop = m.targetScroll;
-        if (m.itemCount > 0)
-        {
-            float viewTop = m.scrollPos;
-            float viewBottom = viewTop + (float)visibleCount;
-            float idxTop = (float)m.selectedIndex;
-            float idxBottom = idxTop + 1.0f;
-
-            if (idxTop < viewTop)
-                targetTop = idxTop;
-            else if (idxBottom > viewBottom)
-                targetTop = idxBottom - (float)visibleCount;
-        }
-
-        if (targetTop < 0.0f)
-            targetTop = 0.0f;
-        if (targetTop > maxScroll)
-            targetTop = maxScroll;
-
-        m.targetScroll = targetTop;
-
-        float diff = m.targetScroll - m.scrollPos;
-        const float speed = 0.25f;
-
-        if (fabsf(diff) > 0.005f)
-        {
-            m.scrollPos += diff * speed;
-            m.scrollbarAlpha = 255;
-            m.lastScrollActivityMs = now;
-            requestRedraw();
-        }
-
-        uint8_t r = m.style.radius;
-        if (r < 2)
-            r = 2;
-
-        pipcore::GuiPlatform *plat = platform();
-
-        bool useCache = (cardMode || plainMode) && (bgColor == _render.bgColor);
-
-        if (!useCache && m.cacheValid)
-        {
-            clearListMenuCache(m, plat);
-        }
-
-        auto renderItemToCache = [&](uint8_t index, bool activeState, uint16_t bg, uint16_t border, uint16_t txtCol, uint16_t subCol) -> uint16_t *
-        {
-            if (!useCache || !m.cacheValid)
-                return nullptr;
-            if (index >= m.itemCount)
-                return nullptr;
-
-            uint16_t *&slot = activeState ? m.cacheActive[index] : m.cacheNormal[index];
-            if (slot)
-                return slot;
-
-            if (m.cacheW <= 0 || m.cacheH <= 0)
-                return nullptr;
-            size_t pixels = (size_t)m.cacheW * (size_t)m.cacheH;
-            if (pixels == 0 || pixels > (std::numeric_limits<size_t>::max() / sizeof(uint16_t)))
-                return nullptr;
-            size_t bytes = pixels * sizeof(uint16_t);
-
-            slot = (uint16_t *)detail::guiAlloc(plat, bytes, pipcore::GuiAllocCaps::PreferExternal);
-            if (!slot)
-                return nullptr;
-
-            if (!_disp.display)
-            {
-                detail::guiFree(plat, slot);
-                slot = nullptr;
-                return nullptr;
-            }
-
-            pipcore::Sprite spr;
-            if (!spr.createSprite(m.cacheW, m.cacheH))
-            {
-                detail::guiFree(plat, slot);
-                slot = nullptr;
-                return nullptr;
-            }
-
-            const String &title = m.items[index].title;
-            const String &sub = m.items[index].subtitle;
-            bool hasSub = sub.length() > 0;
-
-            bool prevRender = _flags.renderToSprite;
-            pipcore::Sprite *prevActive = _render.activeSprite;
-            _flags.renderToSprite = 1;
-            _render.activeSprite = &spr;
-
-            fillRect()
-                .at(0, 0)
-                .size(m.cacheW, m.cacheH)
-                .color(bg)
-                .draw();
-            fillRoundRect(0, 0, m.cacheW, m.cacheH, r, bg);
-
-            int16_t txLocal = 10;
-
-            uint16_t titlePx = m.style.titleFontPx;
-            uint16_t subPx = m.style.subtitleFontPx;
-            uint16_t gapPx = m.style.lineGapPx;
-
-            if (titlePx == 0)
-                titlePx = hasSub ? 18 : 20;
-            if (hasSub)
-            {
-                if (subPx == 0)
-                    subPx = (uint16_t)((titlePx * 7U) / 10U);
-                if (gapPx == 0)
-                    gapPx = (uint16_t)(titlePx / 3U);
-                if (gapPx > 0)
-                    gapPx = (uint16_t)(gapPx + 4);
-            }
-            else
-            {
-                subPx = 0;
-                gapPx = 0;
-            }
-
-            int16_t titleW = 0;
-            int16_t titleH = 0;
-            int16_t subW = 0;
-            int16_t subH = 0;
-
-            uint16_t prevW = fontWeight();
-            setFontSize(titlePx);
-            measureText(title, titleW, titleH);
-
-            if (hasSub && subPx > 0)
-            {
-                setFontWeight(Medium);
-                setFontSize(subPx);
-                measureText(sub, subW, subH);
-            }
-
-            int16_t totalH = titleH;
-            if (hasSub && subH > 0)
-                totalH += gapPx + subH;
-
-            int16_t baseY = (int16_t)((m.cacheH - totalH) / 2);
-            baseY -= 4;
-            if (baseY < 2)
-                baseY = 2;
-
-            int16_t tyTitleLocal = baseY;
-            int16_t tySubLocal = baseY + titleH + (hasSub ? gapPx : 0);
-
-            setFontSize(titlePx);
-            drawTextAligned(title, txLocal, tyTitleLocal, txtCol, bg, AlignLeft);
-
-            if (hasSub && subPx > 0)
-            {
-                setFontWeight(Medium);
-                setFontSize(subPx);
-                drawTextAligned(sub, txLocal, tySubLocal, subCol, bg, AlignLeft);
-            }
-
-            setFontWeight(prevW);
-            _flags.renderToSprite = prevRender;
-            _render.activeSprite = prevActive;
-
-            memcpy(slot, (uint16_t *)spr.getBuffer(), pixels * sizeof(uint16_t));
-            spr.deleteSprite();
-
-            return slot;
-        };
-
-        auto renderPlainItemToCache = [&](uint8_t index, bool activeState, uint16_t bg, uint16_t border, uint16_t txtCol) -> uint16_t *
-        {
-            if (!useCache || !m.cacheValid)
-                return nullptr;
-            if (index >= m.itemCount)
-                return nullptr;
-
-            uint16_t *&slot = activeState ? m.cacheActive[index] : m.cacheNormal[index];
-            if (slot)
-                return slot;
-
-            if (m.cacheW <= 0 || m.cacheH <= 0)
-                return nullptr;
-            size_t pixels = (size_t)m.cacheW * (size_t)m.cacheH;
-            if (pixels == 0 || pixels > (std::numeric_limits<size_t>::max() / sizeof(uint16_t)))
-                return nullptr;
-            size_t bytes = pixels * sizeof(uint16_t);
-
-            slot = (uint16_t *)detail::guiAlloc(plat, bytes, pipcore::GuiAllocCaps::PreferExternal);
-            if (!slot)
-                return nullptr;
-
-            if (!_disp.display)
-            {
-                detail::guiFree(plat, slot);
-                slot = nullptr;
-                return nullptr;
-            }
-
-            pipcore::Sprite spr;
-            if (!spr.createSprite(m.cacheW, m.cacheH))
-            {
-                detail::guiFree(plat, slot);
-                slot = nullptr;
-                return nullptr;
-            }
-
-            const String &title = m.items[index].title;
-
-            bool prevRender = _flags.renderToSprite;
-            pipcore::Sprite *prevActive = _render.activeSprite;
-            _flags.renderToSprite = 1;
-            _render.activeSprite = &spr;
-
-            fillRect()
-                .at(0, 0)
-                .size(m.cacheW, m.cacheH)
-                .color(bg)
-                .draw();
-            if (activeState)
-            {
-                fillRoundRect(0, 0, m.cacheW, m.cacheH, r, bg);
-            }
-
-            int16_t txLocal = 12;
-
-            uint16_t titlePx = m.style.titleFontPx;
-            if (titlePx == 0)
-                titlePx = 18;
-
-            int16_t titleW = 0;
-            int16_t titleH = 0;
-            uint16_t prevW = fontWeight();
-            setFontSize(titlePx);
-            measureText(title, titleW, titleH);
-
-            int16_t baseY = (int16_t)((m.cacheH - titleH) / 2);
-            baseY -= 4;
-            if (baseY < 2)
-                baseY = 2;
-
-            setFontSize(titlePx);
-            drawTextAligned(title, txLocal, baseY, txtCol, bg, AlignLeft);
-
-            setFontWeight(prevW);
-            _flags.renderToSprite = prevRender;
-            _render.activeSprite = prevActive;
-
-            memcpy(slot, (uint16_t *)spr.getBuffer(), pixels * sizeof(uint16_t));
-            spr.deleteSprite();
-
-            return slot;
-        };
-
-        int16_t startIndex = (int16_t)floorf(m.scrollPos) - 2;
-        int16_t endIndex = startIndex + (int16_t)visibleCount + 4;
-        if (startIndex < 0)
-            startIndex = 0;
-        if (endIndex < 0)
-            endIndex = 0;
-        if (endIndex >= (int16_t)m.itemCount)
-            endIndex = (int16_t)m.itemCount - 1;
-
-        for (int16_t ii = startIndex; ii <= endIndex; ++ii)
-        {
-            uint8_t i = (uint8_t)ii;
-            float relIndex = (float)ii - m.scrollPos;
-            float posY = (float)contentTop + relIndex * itemSpan;
-            int16_t yy = (int16_t)posY;
-
-            if (yy >= bottom || (yy + cardH) <= top)
-                continue;
-
-            bool active = (i == m.selectedIndex);
-
-            uint16_t bg = active ? m.style.cardActiveColor : (cardMode ? m.style.cardColor : bgColor565);
-            uint16_t border = (uint16_t)detail::blend565(bg, (uint16_t)0xFFFF, 18);
-            uint16_t txtCol = autoTextColor565List(bg);
-            uint16_t subCol = (txtCol == 0xFFFF) ? (uint16_t)0xC618 : (uint16_t)0x8410;
-
-            if (!cardMode)
-            {
-                const String &title = m.items[i].title;
-
-                if (plainMode && useCache)
-                {
-                    uint16_t bg2 = active ? m.style.cardActiveColor : bgColor565;
-                    uint16_t border2 = (uint16_t)detail::blend565(bg2, (uint16_t)0xFFFF, 18);
-                    uint16_t txt2 = autoTextColor565List(bg2);
-                    uint16_t *buf = renderPlainItemToCache(i, active, bg2, border2, txt2);
-                    if (buf)
-                    {
-                        t->pushImage(cx, yy, cardW, cardH, buf);
-
-                        continue;
-                    }
-                }
-
-                if (active)
-                {
-                    fillRoundRect(cx, yy, cardW, cardH, r, bg);
-                }
-
-                int16_t tx = cx + 12;
-
-                uint16_t titlePx = m.style.titleFontPx;
-                if (titlePx == 0)
-                    titlePx = 18;
-
-                int16_t titleW = 0;
-                int16_t titleH = 0;
-                uint16_t prevW = fontWeight();
-                setFontSize(titlePx);
-                measureText(title, titleW, titleH);
-                int16_t baseY = yy + (int16_t)((cardH - titleH) / 2);
-                baseY -= 4;
-                if (baseY < yy + 2)
-                    baseY = (int16_t)(yy + 2);
-
-                setFontSize(titlePx);
-                drawTextAligned(title, tx, baseY, txtCol, bg, AlignLeft);
-                setFontWeight(prevW);
-
-                continue;
-            }
-
-            if (useCache)
-            {
-                uint16_t *buf = renderItemToCache(i, active, bg, border, txtCol, subCol);
-                if (buf)
-                {
-                    t->pushImage(cx, yy, cardW, cardH, buf);
-
-                    continue;
-                }
-            }
-
-            fillRoundRect(cx, yy, cardW, cardH, r, bg);
-
-            int16_t tx = cx + 10;
-            const String &title = m.items[i].title;
-            const String &sub = m.items[i].subtitle;
-            bool hasSub = sub.length() > 0;
-
-            uint16_t titlePx = m.style.titleFontPx;
-            uint16_t subPx = m.style.subtitleFontPx;
-            uint16_t gapPx = m.style.lineGapPx;
-
-            if (titlePx == 0)
-                titlePx = hasSub ? 18 : 20;
-            if (hasSub)
-            {
-                if (subPx == 0)
-                    subPx = (uint16_t)((titlePx * 7U) / 10U);
-                if (gapPx == 0)
-                    gapPx = (uint16_t)(titlePx / 3U);
-                if (gapPx > 0)
-                    gapPx = (uint16_t)(gapPx + 3);
-            }
-            else
-            {
-                subPx = 0;
-                gapPx = 0;
-            }
-
-            int16_t titleW = 0;
-            int16_t titleH = 0;
-            int16_t subW = 0;
-            int16_t subH = 0;
-
-            uint16_t prevW = fontWeight();
-            setFontSize(titlePx);
-            measureText(title, titleW, titleH);
-
-            if (hasSub && subPx > 0)
-            {
-                setFontWeight(Medium);
-                setFontSize(subPx);
-                measureText(sub, subW, subH);
-            }
-
-            int16_t totalH = titleH;
-            if (hasSub && subH > 0)
-                totalH += gapPx + subH;
-
-            int16_t baseY = yy + (int16_t)((cardH - totalH) / 2);
-            baseY -= 4;
-            if (baseY < yy + 2)
-                baseY = (int16_t)(yy + 2);
-
-            int16_t tyTitle = baseY;
-            int16_t tySub = baseY + titleH + (hasSub ? gapPx : 0);
-
-            setFontSize(titlePx);
-            drawTextAligned(title, tx, tyTitle, txtCol, bg, AlignLeft);
-
-            if (hasSub && subPx > 0)
-            {
-                setFontWeight(Medium);
-                setFontSize(subPx);
-                drawTextAligned(sub, tx, tySub, subCol, bg, AlignLeft);
-            }
-
-            setFontWeight(prevW);
-        }
-
-        const uint32_t SHOW_MS = 400;
-        const uint32_t FADE_MS = 300;
-        const uint32_t SLIDE_MS = 250;
-
-        float targetAlpha = 0.0f;
-        float slideT = 0.0f;
-
-        uint32_t since = (m.lastScrollActivityMs == 0) ? 0 : ((now >= m.lastScrollActivityMs) ? (now - m.lastScrollActivityMs) : 0);
-
-        if (since <= SHOW_MS)
-        {
-            targetAlpha = 1.0f;
-        }
-        else if (since <= SHOW_MS + FADE_MS)
-        {
-            float tFade = (float)(since - SHOW_MS) / (float)FADE_MS;
-            float tt = tFade * tFade * (3.0f - 2.0f * tFade);
-            targetAlpha = 1.0f - tt;
-        }
-        else if (since <= SHOW_MS + FADE_MS + SLIDE_MS)
-        {
-            targetAlpha = 0.0f;
-            slideT = (float)(since - (SHOW_MS + FADE_MS)) / (float)SLIDE_MS;
-            if (slideT > 1.0f)
-                slideT = 1.0f;
-        }
-        else
-        {
-            targetAlpha = 0.0f;
-            slideT = 1.0f;
-        }
-
-        uint8_t newAlpha = (uint8_t)(targetAlpha * 255.0f + 0.5f);
-        if (newAlpha != m.scrollbarAlpha)
-        {
-            m.scrollbarAlpha = newAlpha;
-            if (newAlpha > 0)
-            {
-                requestRedraw();
-            }
-        }
-
-        if (m.itemCount > visibleCount && m.scrollbarAlpha > 5)
-        {
-            int16_t trH = bottom - contentTop;
-            int16_t baseX = right - 4;
-            int16_t trX = baseX + (int16_t)(6.0f * slideT);
-
-            float ratio = (float)visibleCount / (float)m.itemCount;
-            if (ratio > 1.0f)
-                ratio = 1.0f;
-            int16_t thH = (int16_t)(trH * ratio);
-            if (thH < 10)
-                thH = 10;
-
-            float pct = (maxScroll <= 0.0f) ? 0.0f : (m.scrollPos / maxScroll);
-            if (pct < 0.0f)
-                pct = 0.0f;
-            if (pct > 1.0f)
-                pct = 1.0f;
-
-            int16_t thY = contentTop + (int16_t)((trH - thH) * pct);
-
-            uint8_t minV = 40;
-            uint8_t maxV = 140;
-            uint8_t v = minV;
-            if (m.scrollbarAlpha > 0)
-            {
-                uint32_t range = (uint32_t)(maxV - minV);
-                v = (uint8_t)(minV + (range * (uint32_t)m.scrollbarAlpha) / 255U);
-            }
-
-            uint16_t col = t->color565(v, v, v);
-
-            t->fillRect(trX, thY, 3, thH, col);
-        }
-    }
-
-    bool GUI::updateListMenu(uint8_t screenId)
-    {
-        int16_t left = 0, right = _render.screenWidth, top = 0, bottom = _render.screenHeight;
+        int16_t top = 0;
+        int16_t height = (int16_t)_render.screenHeight;
         if (_flags.statusBarEnabled && _status.height > 0)
         {
             if (_status.pos == Top)
                 top += _status.height;
             else if (_status.pos == Bottom)
-                bottom -= _status.height;
-            else if (_status.pos == Left)
-                left += _status.height;
-            else if (_status.pos == Right)
-                right -= _status.height;
+                height -= _status.height;
         }
 
-        int16_t w = right - left;
-        int16_t h = bottom - top;
-        if (w <= 0 || h <= 0)
+        if (_render.screenWidth <= 0 || height <= top)
             return false;
 
-        return updateListMenu(screenId, left, top, w, h, _render.bgColor);
+        return updateList(screenId, 0, top, (int16_t)_render.screenWidth,
+                          (int16_t)(height - top), _render.bgColor565);
     }
 
-    bool GUI::updateListMenu(uint8_t screenId, int16_t x, int16_t y, int16_t w, int16_t h, uint32_t bgColor)
+    bool GUI::updateList(uint8_t screenId, int16_t x, int16_t y, int16_t w, int16_t h, uint16_t bgColor565)
     {
-        ListMenuState *pm = getListMenu(screenId);
-        if (!pm)
+        ListState *menuPtr = getList(screenId);
+        if (!menuPtr || !menuPtr->configured || menuPtr->itemCount == 0 || w <= 0 || h <= 0)
             return false;
-        ListMenuState &m = *pm;
-        if (!m.configured || m.itemCount == 0)
-            return false;
-        if (w <= 0 || h <= 0)
-            return false;
+        ListState &menu = *menuPtr;
 
-        const uint16_t bgColor565 = detail::color888To565(bgColor);
-
-        if (!_flags.spriteEnabled || !_disp.display)
+        auto drawList = [&]()
         {
-            bool prevRender = _flags.renderToSprite;
-            pipcore::Sprite *prevActive = _render.activeSprite;
+            auto *target = getDrawTarget();
+            const uint32_t now = nowMs();
 
-            _flags.renderToSprite = 0;
-            renderListMenu(screenId, x, y, w, h, bgColor);
-            _flags.renderToSprite = prevRender;
-            _render.activeSprite = prevActive;
-            return true;
-        }
+            uint32_t dtMs = 0;
+            if (menu.lastUpdateMs != 0)
+                dtMs = (now >= menu.lastUpdateMs) ? (now - menu.lastUpdateMs) : 0;
+            menu.lastUpdateMs = now;
+            if (dtMs > 100)
+                dtMs = 100;
 
-        pipcore::GuiPlatform *plat = platform();
+            const bool isViewportTarget = (menu.viewportSprite && target == menu.viewportSprite);
+            const int16_t left = isViewportTarget ? 0 : x;
+            const int16_t top = isViewportTarget ? 0 : y;
+            const int16_t right = left + w;
+            const int16_t bottom = top + h;
+            const int16_t padY = (int16_t)menu.style.spacing;
+            const int16_t contentTop = top + padY;
+            const int16_t contentBottom = bottom - padY;
+            if (contentBottom <= contentTop)
+                return;
 
-        if (!m.viewportSprite)
-        {
-            void *mem = detail::guiAlloc(plat, sizeof(pipcore::Sprite), pipcore::GuiAllocCaps::Default);
-            if (mem)
-            {
-                m.viewportSprite = new (mem) pipcore::Sprite();
-            }
-        }
-
-        pipcore::Sprite *vp = m.viewportSprite;
-        if (vp)
-        {
-            if (!vp->getBuffer() || vp->width() != w || vp->height() != h)
-            {
-                vp->deleteSprite();
-                if (!vp->createSprite(w, h))
-                {
-                    vp->deleteSprite();
-                    vp->~Sprite();
-                    detail::guiFree(plat, vp);
-                    m.viewportSprite = nullptr;
-                    vp = nullptr;
-                }
-            }
-        }
-
-        bool usedViewport = (vp && vp->getBuffer());
-
-        uint8_t prevNeedRedraw = _flags.needRedraw;
-        bool prevRender = _flags.renderToSprite;
-        pipcore::Sprite *prevActive = _render.activeSprite;
-
-        bool incrementalUsed = false;
-        int16_t dirtyX = 0, dirtyY = 0, dirtyW = w, dirtyH = h;
-
-        if (usedViewport)
-        {
-            const bool cardMode = (m.style.mode == Cards);
-            int16_t marginX = 5;
-            int16_t usableW = w;
-            int16_t usableH = h;
-
-            int16_t cardW;
-            if (m.style.cardWidth > 0 && m.style.cardWidth < usableW)
-                cardW = m.style.cardWidth;
-            else
-                cardW = usableW - marginX * 2;
-            if (cardW > usableW)
-                cardW = usableW;
+            const bool cardMode = (menu.style.mode == Cards);
+            const int16_t marginX = 1;
+            int16_t cardW = (menu.style.cardWidth > 0 && menu.style.cardWidth < w)
+                                ? menu.style.cardWidth
+                                : (int16_t)(w - marginX * 2);
+            if (cardW > w)
+                cardW = w;
             if (cardW < 20)
                 cardW = 20;
 
-            int16_t cardH;
-            if (m.style.cardHeight > 0)
-                cardH = m.style.cardHeight;
-            else
-                cardH = cardMode ? 50 : 34;
-            if (m.style.cardHeight <= 0 && cardH * 2 + m.style.spacing > usableH)
-                cardH = usableH / 3;
+            int16_t cardH = (menu.style.cardHeight > 0) ? menu.style.cardHeight : (cardMode ? 50 : 34);
+            if (menu.style.cardHeight <= 0 && cardH * 2 + menu.style.spacing > h)
+                cardH = h / 3;
 
-            int16_t itemSpanPx = (int16_t)(cardH + m.style.spacing);
-            if (itemSpanPx <= 0)
-                itemSpanPx = 1;
+            const int16_t cardX = left + (w - cardW) / 2;
 
-            int32_t newScrollPx = (int32_t)lroundf(m.scrollPos * (float)itemSpanPx);
-            int32_t oldScrollPx = m.viewportScrollPx;
-            int32_t dy = newScrollPx - oldScrollPx;
-            uint8_t oldSel = m.viewportSelectedIndex;
-
-            bool canIncremental = m.viewportValid &&
-                                  m.viewportW == w && m.viewportH == h &&
-                                  m.viewportBgColor == bgColor &&
-                                  m.viewportCardW == cardW && m.viewportCardH == cardH &&
-                                  m.viewportItemSpanPx == itemSpanPx;
-
-            _flags.renderToSprite = 1;
-            _render.activeSprite = vp;
-            _flags.needRedraw = 0;
-
-            int32_t vpClipX = 0, vpClipY = 0, vpClipW = 0, vpClipH = 0;
-            vp->getClipRect(&vpClipX, &vpClipY, &vpClipW, &vpClipH);
-
-            auto clipRender = [&](int16_t cx, int16_t cy, int16_t cw, int16_t ch)
-            {
-                if (cw <= 0 || ch <= 0)
-                    return;
-                if (cx < 0)
-                {
-                    cw = (int16_t)(cw + cx);
-                    cx = 0;
-                }
-                if (cy < 0)
-                {
-                    ch = (int16_t)(ch + cy);
-                    cy = 0;
-                }
-                if (cx >= w || cy >= h)
-                    return;
-                if (cx + cw > w)
-                    cw = (int16_t)(w - cx);
-                if (cy + ch > h)
-                    ch = (int16_t)(h - cy);
-                if (cw <= 0 || ch <= 0)
-                    return;
-                vp->setClipRect(cx, cy, cw, ch);
-                renderListMenu(screenId, 0, 0, w, h, bgColor);
-            };
-
-            auto addDirty = [&](int16_t rx, int16_t ry, int16_t rw, int16_t rh)
-            {
-                if (rw <= 0 || rh <= 0)
-                    return;
-                if (rx < 0)
-                {
-                    rw = (int16_t)(rw + rx);
-                    rx = 0;
-                }
-                if (ry < 0)
-                {
-                    rh = (int16_t)(rh + ry);
-                    ry = 0;
-                }
-                if (rx >= w || ry >= h)
-                    return;
-                if (rx + rw > w)
-                    rw = (int16_t)(w - rx);
-                if (ry + rh > h)
-                    rh = (int16_t)(h - ry);
-                if (rw <= 0 || rh <= 0)
-                    return;
-
-                if (dirtyW == 0 || dirtyH == 0)
-                {
-                    dirtyX = rx;
-                    dirtyY = ry;
-                    dirtyW = rw;
-                    dirtyH = rh;
-                    return;
-                }
-
-                int16_t x0 = (dirtyX < rx) ? dirtyX : rx;
-                int16_t y0 = (dirtyY < ry) ? dirtyY : ry;
-                int16_t x1a = (int16_t)(dirtyX + dirtyW);
-                int16_t x1b = (int16_t)(rx + rw);
-                int16_t y1a = (int16_t)(dirtyY + dirtyH);
-                int16_t y1b = (int16_t)(ry + rh);
-                int16_t x1 = (x1a > x1b) ? x1a : x1b;
-                int16_t y1 = (y1a > y1b) ? y1a : y1b;
-
-                dirtyX = x0;
-                dirtyY = y0;
-                dirtyW = (int16_t)(x1 - x0);
-                dirtyH = (int16_t)(y1 - y0);
-            };
-
-            auto shiftViewportY = [&](int32_t shift)
-            {
-                if (shift == 0)
-                    return;
-
-                uint16_t *buf = (uint16_t *)vp->getBuffer();
-                if (!buf)
-                    return;
-                int32_t ww = vp->width();
-                int32_t hh = vp->height();
-                if (ww <= 0 || hh <= 0)
-                    return;
-
-                if (shift > 0)
-                {
-                    if (shift >= hh)
-                        shift = hh;
-                    size_t rowsToCopy = (size_t)(hh - shift);
-                    memmove(buf, buf + (size_t)shift * (size_t)ww, rowsToCopy * (size_t)ww * sizeof(uint16_t));
-                    vp->fillRect(0, (int16_t)(hh - shift), (int16_t)ww, (int16_t)shift, bgColor565);
-                }
-                else
-                {
-                    int32_t d = -shift;
-                    if (d >= hh)
-                        d = hh;
-                    size_t rowsToCopy = (size_t)(hh - d);
-                    memmove(buf + (size_t)d * (size_t)ww, buf, rowsToCopy * (size_t)ww * sizeof(uint16_t));
-                    vp->fillRect(0, 0, (int16_t)ww, (int16_t)d, bgColor565);
-                }
-            };
-
-            auto computeCardY = [&](uint8_t idx) -> int16_t
-            {
-                const int16_t contentTop = 4;
-                float relIndex = (float)idx - m.scrollPos;
-                float posY = (float)contentTop + relIndex * (float)itemSpanPx;
-                return (int16_t)posY;
-            };
-
-            dirtyW = 0;
-            dirtyH = 0;
-
-            int32_t absDy = (dy < 0) ? -dy : dy;
-            int32_t maxInc = (int32_t)itemSpanPx * 2;
-
-            if (canIncremental && dy != 0 && absDy < h && absDy <= maxInc)
-            {
-                shiftViewportY(dy);
-
-                if (dy > 0)
-                {
-                    clipRender(0, (int16_t)(h - dy), w, (int16_t)dy);
-                    addDirty(0, (int16_t)(h - dy), w, (int16_t)dy);
-                }
-                else
-                {
-                    int32_t d = -dy;
-                    clipRender(0, 0, w, (int16_t)d);
-                    addDirty(0, 0, w, (int16_t)d);
-                }
-                incrementalUsed = true;
-            }
-            else if (canIncremental && dy == 0)
-            {
-                incrementalUsed = true;
-            }
-
-            if (incrementalUsed)
-            {
-                int16_t barW = 12;
-                if (barW > w)
-                    barW = w;
-                if (barW > 0)
-                {
-                    clipRender((int16_t)(w - barW), 0, barW, h);
-                    addDirty((int16_t)(w - barW), 0, barW, h);
-                }
-
-                if (oldSel != m.selectedIndex)
-                {
-                    int16_t cx = (int16_t)((usableW - cardW) / 2);
-
-                    int16_t yyOld = computeCardY(oldSel);
-                    if (!(yyOld >= h || (yyOld + cardH) <= 0))
-                    {
-                        clipRender(cx, yyOld, cardW, cardH);
-                        addDirty(cx, yyOld, cardW, cardH);
-                    }
-
-                    int16_t yyNew = computeCardY(m.selectedIndex);
-                    if (!(yyNew >= h || (yyNew + cardH) <= 0))
-                    {
-                        clipRender(cx, yyNew, cardW, cardH);
-                        addDirty(cx, yyNew, cardW, cardH);
-                    }
-                }
-
-                if (dirtyW <= 0 || dirtyH <= 0)
-                {
-                    dirtyX = 0;
-                    dirtyY = 0;
-                    dirtyW = w;
-                    dirtyH = h;
-                }
-            }
-            else
-            {
-                vp->setClipRect(0, 0, w, h);
-                renderListMenu(screenId, 0, 0, w, h, bgColor);
-                dirtyX = 0;
-                dirtyY = 0;
-                dirtyW = w;
-                dirtyH = h;
-            }
-
-            vp->setClipRect(vpClipX, vpClipY, vpClipW, vpClipH);
-
-            m.viewportX = x;
-            m.viewportY = y;
-            m.viewportW = w;
-            m.viewportH = h;
-            m.viewportCardW = cardW;
-            m.viewportCardH = cardH;
-            m.viewportItemSpanPx = itemSpanPx;
-            m.viewportBgColor = bgColor;
-            m.viewportScrollPos = m.scrollPos;
-            m.viewportScrollPx = newScrollPx;
-            m.viewportSelectedIndex = m.selectedIndex;
-            m.viewportValid = true;
-        }
-        else
-        {
             int32_t clipX = 0, clipY = 0, clipW = 0, clipH = 0;
-            _render.sprite.getClipRect(&clipX, &clipY, &clipW, &clipH);
+            target->getClipRect(&clipX, &clipY, &clipW, &clipH);
 
-            _render.sprite.setClipRect(x, y, w, h);
+            if (isViewportTarget)
+            {
+                target->setClipRect(0, 0, w, h);
+                target->fillRect(0, 0, w, h, bgColor565);
+            }
+            else
+            {
+                target->setClipRect(left, top, w, h);
+            }
 
-            _flags.renderToSprite = 1;
-            _render.activeSprite = &_render.sprite;
-            _flags.needRedraw = 0;
-            renderListMenu(screenId, x, y, w, h, bgColor);
+            int32_t bgL = left;
+            int32_t bgT = top;
+            int32_t bgR = right;
+            int32_t bgB = bottom;
 
-            _render.sprite.setClipRect(clipX, clipY, clipW, clipH);
-        }
+            if (clipW > 0 && clipH > 0)
+            {
+                int32_t cR = clipX + clipW;
+                int32_t cB = clipY + clipH;
 
-        bool requestedMore = (_flags.needRedraw != 0);
+                if (bgL < clipX)
+                    bgL = clipX;
+                if (bgT < clipY)
+                    bgT = clipY;
+                if (bgR > cR)
+                    bgR = cR;
+                if (bgB > cB)
+                    bgB = cB;
+            }
 
-        _flags.needRedraw = prevNeedRedraw;
+            const int32_t bgW = bgR - bgL;
+            const int32_t bgH = bgB - bgT;
+            if (!isViewportTarget && bgW > 0 && bgH > 0)
+                target->fillRect((int16_t)bgL, (int16_t)bgT, (int16_t)bgW, (int16_t)bgH, bgColor565);
+
+            target->setClipRect(left, contentTop, w, contentBottom - contentTop);
+
+            int16_t visibleHeight = contentBottom - contentTop;
+            if (visibleHeight < cardH)
+                visibleHeight = cardH;
+
+            const float itemSpan = (float)(cardH + menu.style.spacing);
+            uint8_t visibleCount = 1;
+            if (itemSpan > 1.0f)
+            {
+                if (visibleHeight > cardH)
+                {
+                    const int16_t extra = (int16_t)(visibleHeight - cardH);
+                    visibleCount = (uint8_t)(1 + (uint8_t)(extra / (int16_t)itemSpan));
+                }
+                if (visibleCount > menu.itemCount)
+                    visibleCount = menu.itemCount;
+            }
+
+            float maxScroll = 0.0f;
+            if (itemSpan > 0.5f)
+            {
+                const float contentHeightPx = (float)menu.itemCount * itemSpan - (float)menu.style.spacing;
+                const float maxScrollPx = contentHeightPx - (float)visibleHeight;
+                if (maxScrollPx > 0.0f)
+                    maxScroll = maxScrollPx / itemSpan;
+            }
+
+            float targetTop = menu.targetScroll;
+            const float viewTop = menu.scrollPos;
+            const float viewBottom = viewTop + (float)visibleCount;
+            const float idxTop = (float)menu.selectedIndex;
+            const float idxBottom = idxTop + 1.0f;
+
+            if (idxBottom > viewBottom)
+                targetTop = idxBottom - (float)visibleCount;
+            else if (idxTop < viewTop)
+                targetTop = idxTop;
+            else
+                targetTop = viewTop;
+
+            if (targetTop < 0.0f)
+                targetTop = 0.0f;
+            if (targetTop > maxScroll)
+                targetTop = maxScroll;
+
+            if (maxScroll > 0.1f)
+            {
+                const float bounceOvershoot = 0.7f;
+                const bool bounceDown = (targetTop >= maxScroll - 0.01f) && (menu.scrollVel > 7.0f);
+                const bool bounceUp = (targetTop <= 0.01f) && (menu.scrollVel < -7.0f);
+
+                if (bounceDown)
+                    targetTop = maxScroll + bounceOvershoot;
+                else if (bounceUp)
+                    targetTop = -bounceOvershoot;
+            }
+
+            menu.targetScroll = targetTop;
+            const float diff = menu.targetScroll - menu.scrollPos;
+
+            if (fabsf(diff) > 0.0005f)
+            {
+                float dtSec = (float)dtMs / 1000.0f;
+                if (dtSec < 0.0f)
+                    dtSec = 0.0f;
+                if (dtSec > 0.1f)
+                    dtSec = 0.1f;
+
+                const float omega = 12.0f;
+                const float xVal = omega * dtSec;
+                const float expVal = 1.0f / (1.0f + xVal + 0.48f * xVal * xVal + 0.235f * xVal * xVal * xVal);
+
+                const float change = menu.scrollPos - menu.targetScroll;
+                const float temp = (menu.scrollVel + omega * change) * dtSec;
+                menu.scrollVel = (menu.scrollVel - omega * temp) * expVal;
+                menu.scrollPos = menu.targetScroll + (change + temp) * expVal;
+
+                if (fabsf(menu.scrollPos - menu.targetScroll) < 0.005f && fabsf(menu.scrollVel) < 0.2f)
+                {
+                    menu.scrollPos = menu.targetScroll;
+                    menu.scrollVel = 0.0f;
+                }
+
+                const float maxAllowed = maxScroll + 2.0f;
+                if (menu.scrollPos < -2.0f)
+                    menu.scrollPos = -2.0f;
+                if (menu.scrollPos > maxAllowed)
+                    menu.scrollPos = maxAllowed;
+
+                menu.scrollbarAlpha = 255;
+                menu.lastScrollActivityMs = now;
+                requestRedraw();
+            }
+            else
+            {
+                menu.scrollVel = 0.0f;
+                menu.scrollPos = menu.targetScroll;
+            }
+
+            float renderScrollPos = menu.scrollPos;
+            if (renderScrollPos < 0.0f)
+                renderScrollPos = 0.0f;
+            if (renderScrollPos > maxScroll)
+                renderScrollPos = maxScroll;
+
+            const float overscroll = menu.scrollPos - renderScrollPos;
+            float overscrollPx = 0.0f;
+            if (fabsf(overscroll) > 0.0001f)
+            {
+                const float mag = fabsf(overscroll);
+                const float rubber = mag / (1.0f + mag);
+                const float sign = (overscroll < 0.0f) ? -1.0f : 1.0f;
+                const float maxVisualPx = 0.85f;
+                overscrollPx = -sign * (rubber * (maxVisualPx * itemSpan));
+            }
+
+            uint8_t radius = menu.style.radius;
+            if (radius < 2)
+                radius = 2;
+
+            int16_t startIndex = (int16_t)floorf(renderScrollPos) - 3;
+            int16_t endIndex = startIndex + (int16_t)visibleCount + 6;
+            if (startIndex < 0)
+                startIndex = 0;
+            if (endIndex >= (int16_t)menu.itemCount)
+                endIndex = (int16_t)menu.itemCount - 1;
+            if (startIndex >= (int16_t)menu.itemCount)
+                startIndex = (int16_t)menu.itemCount - 1;
+            if (startIndex > endIndex)
+                startIndex = endIndex;
+
+            auto setTextFont = [&](uint16_t weight, uint16_t px)
+            {
+                setFontWeight(weight);
+                setFontSize(px);
+            };
+
+            auto ensureTextMetrics = [&](ListState::Item &item,
+                                         uint16_t titlePx, uint16_t titleWeight,
+                                         bool hasSub, uint16_t subPx, uint16_t subWeight)
+            {
+                if (item.cachedTitlePx != titlePx || item.cachedTitleWeight != titleWeight)
+                {
+                    setTextFont(titleWeight, titlePx);
+                    measureText(item.title, item.titleW, item.titleH);
+                    item.cachedTitlePx = titlePx;
+                    item.cachedTitleWeight = titleWeight;
+                }
+
+                if (hasSub && subPx > 0)
+                {
+                    if (item.cachedSubPx != subPx || item.cachedSubWeight != subWeight)
+                    {
+                        setTextFont(subWeight, subPx);
+                        measureText(item.subtitle, item.subW, item.subH);
+                        item.cachedSubPx = subPx;
+                        item.cachedSubWeight = subWeight;
+                    }
+                }
+                else
+                {
+                    item.subW = item.subH = 0;
+                    item.cachedSubPx = item.cachedSubWeight = 0;
+                }
+            };
+
+            auto drawItemIcon = [&](uint16_t iconId, int16_t iconX, int16_t itemY,
+                                    int16_t iconSize, int16_t gap,
+                                    uint16_t fg, uint16_t bg, bool roundY) -> int16_t
+            {
+                if (iconId == 0xFFFF || iconId >= psdf_icons::IconCount)
+                    return 0;
+
+                const int16_t iconY = roundY
+                                          ? itemY + (int16_t)lroundf((float)(cardH - iconSize) * 0.5f)
+                                          : itemY + (cardH - iconSize) / 2;
+
+                drawIcon()
+                    .pos(iconX, iconY)
+                    .size((uint16_t)iconSize)
+                    .icon(iconId)
+                    .color(fg)
+                    .bgColor(bg)
+                    .draw();
+                return (int16_t)(iconSize + gap);
+            };
+
+            constexpr uint16_t TITLE_WEIGHT = 600;
+            constexpr uint16_t SUBTITLE_WEIGHT = 500;
+
+            for (int16_t itemIndex = startIndex; itemIndex <= endIndex; ++itemIndex)
+            {
+                const uint8_t i = (uint8_t)itemIndex;
+                const float relIndex = (float)itemIndex - renderScrollPos;
+                const float posY = (float)contentTop + relIndex * itemSpan + overscrollPx;
+                const int16_t itemY = (int16_t)floorf(posY);
+
+                if (itemY >= contentBottom || (itemY + cardH) <= contentTop)
+                    continue;
+
+                ListState::Item &item = menu.items[i];
+                const bool active = (i == menu.selectedIndex);
+                const uint16_t bg = active ? menu.style.cardActiveColor : (cardMode ? menu.style.cardColor : bgColor565);
+                const uint16_t textColor = detail::autoTextColor(bg);
+
+                if (!cardMode)
+                {
+                    if (active)
+                        fillRoundRect(cardX, itemY, cardW, cardH, radius, bg);
+
+                    const int16_t textOffsetX = drawItemIcon(item.iconId, cardX + 8, itemY, (cardH > 30) ? 22 : 18, 6,
+                                                             active ? textColor : detail::autoTextColor(bgColor565),
+                                                             active ? bg : bgColor565, false);
+                    const int16_t textX = cardX + 12 + textOffsetX;
+                    uint16_t titlePx = menu.style.titleFontPx;
+                    if (titlePx == 0)
+                        titlePx = 18;
+
+                    ensureTextMetrics(item, titlePx, TITLE_WEIGHT, false, 0, 0);
+
+                    int16_t baseY = itemY + (int16_t)((cardH - item.titleH) / 2);
+                    if (baseY < itemY + 2)
+                        baseY = (int16_t)(itemY + 2);
+
+                    if (baseY + item.titleH <= contentTop || baseY >= contentBottom)
+                        continue;
+
+                    setTextFont(TITLE_WEIGHT, titlePx);
+                    drawTextAligned(item.title, textX, baseY, textColor, bg, AlignLeft);
+
+                    continue;
+                }
+
+                fillRoundRect(cardX, itemY, cardW, cardH, radius, bg);
+
+                const String &subtitle = item.subtitle;
+                const bool hasSub = subtitle.length() > 0;
+                const uint16_t subColor = (textColor == 0xFFFF) ? (uint16_t)0xC618 : (uint16_t)0x8410;
+                const int16_t textOffsetX = drawItemIcon(item.iconId, cardX + 10, itemY, (cardH > 40) ? 20 : 18, 8,
+                                                         textColor, bg, true);
+                const int16_t textX = cardX + 10 + textOffsetX;
+                uint16_t titlePx = menu.style.titleFontPx;
+                uint16_t subPx = menu.style.subtitleFontPx;
+                uint16_t gapPx = menu.style.lineGapPx;
+
+                if (titlePx == 0)
+                    titlePx = hasSub ? 18 : 20;
+                if (hasSub)
+                {
+                    if (subPx == 0)
+                        subPx = (uint16_t)((titlePx * 7U) / 10U);
+                    if (gapPx == 0)
+                        gapPx = (uint16_t)(titlePx / 5U);
+                }
+                else
+                {
+                    subPx = 0;
+                    gapPx = 0;
+                }
+
+                ensureTextMetrics(item, titlePx, TITLE_WEIGHT, hasSub, subPx, SUBTITLE_WEIGHT);
+
+                int16_t totalH = item.titleH;
+                if (hasSub && item.subH > 0)
+                    totalH += gapPx + item.subH;
+
+                int16_t baseY = itemY + (int16_t)((cardH - totalH) / 2);
+                if (baseY < itemY + 2)
+                    baseY = (int16_t)(itemY + 2);
+
+                const int16_t titleY = baseY;
+                const int16_t subY = baseY + item.titleH + (hasSub ? gapPx : 0);
+
+                setTextFont(TITLE_WEIGHT, titlePx);
+                drawTextAligned(item.title, textX, titleY, textColor, bg, AlignLeft);
+
+                if (hasSub && subPx > 0)
+                {
+                    setTextFont(SUBTITLE_WEIGHT, subPx);
+                    drawTextAligned(subtitle, textX, subY, subColor, bg, AlignLeft);
+                }
+            }
+
+            constexpr uint32_t SHOW_MS = 700;
+            constexpr uint32_t FADE_MS = 450;
+            constexpr uint32_t SLIDE_MS = 350;
+
+            float targetAlpha = 0.0f;
+            float slideT = 0.0f;
+            bool animActive = false;
+            uint32_t since = 0;
+
+            if (menu.lastScrollActivityMs == 0)
+            {
+                slideT = 1.0f;
+            }
+            else
+            {
+                since = (now >= menu.lastScrollActivityMs) ? (now - menu.lastScrollActivityMs) : 0;
+                animActive = (since <= (SHOW_MS + FADE_MS + SLIDE_MS));
+
+                if (since <= SHOW_MS)
+                {
+                    targetAlpha = 1.0f;
+                }
+                else if (since <= SHOW_MS + FADE_MS)
+                {
+                    float tFade = (float)(since - SHOW_MS) / (float)FADE_MS;
+                    float tt = tFade * tFade * (3.0f - 2.0f * tFade);
+                    targetAlpha = 1.0f - tt;
+                }
+                else if (since <= SHOW_MS + FADE_MS + SLIDE_MS)
+                {
+                    targetAlpha = 0.0f;
+                    slideT = (float)(since - (SHOW_MS + FADE_MS)) / (float)SLIDE_MS;
+                    if (slideT > 1.0f)
+                        slideT = 1.0f;
+                }
+                else
+                {
+                    targetAlpha = 0.0f;
+                    slideT = 1.0f;
+                }
+            }
+
+            const uint8_t newAlpha = (uint8_t)(targetAlpha * 255.0f + 0.5f);
+            if (newAlpha != menu.scrollbarAlpha)
+            {
+                menu.scrollbarAlpha = newAlpha;
+                requestRedraw();
+            }
+            else if (animActive && (newAlpha > 0 || slideT < 1.0f))
+            {
+                requestRedraw();
+            }
+
+            target->setClipRect(left, top, w, h);
+
+            if (menu.itemCount > visibleCount && menu.scrollbarAlpha > 5)
+            {
+                const int16_t sbInset = 2;
+                int16_t trackTop = top + sbInset;
+                int16_t trackH = h - (int16_t)(2 * sbInset);
+                if (trackH < 1)
+                    trackH = 1;
+                const int16_t baseX = right - 4;
+                const int16_t trackX = baseX + (int16_t)(6.0f * slideT);
+
+                const float ratio = (float)visibleCount / (float)menu.itemCount;
+                int16_t thumbH = (int16_t)(trackH * ratio);
+                if (thumbH < 10)
+                    thumbH = 10;
+
+                float pct = (maxScroll <= 0.0f) ? 0.0f : (menu.scrollPos / maxScroll);
+                if (pct < 0.0f)
+                    pct = 0.0f;
+                if (pct > 1.0f)
+                    pct = 1.0f;
+
+                int16_t thumbY = trackTop + (int16_t)((trackH - thumbH) * pct);
+
+                uint8_t minV = 40;
+                uint8_t maxV = 140;
+                uint32_t range = (uint32_t)(maxV - minV);
+                uint8_t v = (uint8_t)(minV + (range * (uint32_t)menu.scrollbarAlpha) / 255U);
+
+                uint16_t col = target->color565(v, v, v);
+
+                uint8_t thumbRadius = (thumbH < 6) ? 1 : 2;
+                fillRoundRect(trackX - 2, thumbY, 3, thumbH, thumbRadius, col);
+            }
+
+            target->setClipRect(clipX, clipY, clipW, clipH);
+        };
+
+        pipcore::Sprite *viewport = ensureListViewport(menu, platform(), w, h);
+        const bool useViewport = (viewport && viewport->getBuffer());
+
+        bool prevRender = _flags.renderToSprite;
+        pipcore::Sprite *prevActive = _render.activeSprite;
+
+        _flags.renderToSprite = 1;
+        _render.activeSprite = useViewport ? viewport : &_render.sprite;
+        drawList();
         _flags.renderToSprite = prevRender;
         _render.activeSprite = prevActive;
 
-        if (usedViewport)
-        {
-            int32_t clipX = 0, clipY = 0, clipW = 0, clipH = 0;
-            _render.sprite.getClipRect(&clipX, &clipY, &clipW, &clipH);
+        if (useViewport)
+            viewport->pushSprite(&_render.sprite, x, y);
 
-            int32_t vpClipX = 0, vpClipY = 0, vpClipW = 0, vpClipH = 0;
-            vp->getClipRect(&vpClipX, &vpClipY, &vpClipW, &vpClipH);
-
-            if (incrementalUsed)
-                vp->setClipRect(dirtyX, dirtyY, dirtyW, dirtyH);
-
-            if (incrementalUsed)
-                _render.sprite.setClipRect((int16_t)(x + dirtyX), (int16_t)(y + dirtyY), dirtyW, dirtyH);
-            else
-                _render.sprite.setClipRect(x, y, w, h);
-
-            vp->pushSprite(&_render.sprite, x, y);
-
-            if (incrementalUsed)
-                vp->setClipRect(vpClipX, vpClipY, vpClipW, vpClipH);
-            _render.sprite.setClipRect(clipX, clipY, clipW, clipH);
-        }
-
-        if (usedViewport && incrementalUsed)
-        {
-            invalidateRect((int16_t)(x + dirtyX), (int16_t)(y + dirtyY), dirtyW, dirtyH);
-        }
-        else
-        {
-            invalidateRect(x, y, w, h);
-        }
+        invalidateRect(x, y, w, h);
         flushDirty();
-        return requestedMore;
+        return true;
     }
 }
-

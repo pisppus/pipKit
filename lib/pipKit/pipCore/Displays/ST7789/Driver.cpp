@@ -1,6 +1,4 @@
 #include <pipCore/Displays/ST7789/Driver.hpp>
-#include <string.h>
-
 namespace pipcore
 {
     namespace
@@ -234,19 +232,4 @@ namespace pipcore
         _transport->flush();
     }
 
-    void ST7789::writeCmd(uint8_t cmd)
-    {
-        if (_transport)
-            _transport->writeCommand(cmd);
-    }
-    void ST7789::writeData(const void *d, size_t l)
-    {
-        if (_transport)
-            _transport->write(d, l);
-    }
-    void ST7789::writeDataQueued(const void *d, size_t l)
-    {
-        if (_transport)
-            _transport->writePixels(d, l);
-    }
 }

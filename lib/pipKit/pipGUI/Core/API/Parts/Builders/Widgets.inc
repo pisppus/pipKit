@@ -24,7 +24,9 @@ struct ToggleSwitchFluentT
     {
     }
 
-    ToggleSwitchFluentT &at(int16_t x, int16_t y)
+    ~ToggleSwitchFluentT() { draw(); }
+
+    ToggleSwitchFluentT &pos(int16_t x, int16_t y)
     {
         PIPGUI_FLUENT_GUARD(ToggleSwitchFluentT<IsUpdate>);
         _x = x;
@@ -96,6 +98,8 @@ struct ButtonFluentT
     {
     }
 
+    ~ButtonFluentT() { draw(); }
+
     ButtonFluentT &label(const String &t)
     {
         PIPGUI_FLUENT_GUARD(ButtonFluentT<IsUpdate>);
@@ -103,7 +107,7 @@ struct ButtonFluentT
         return *this;
     }
 
-    ButtonFluentT &at(int16_t x, int16_t y)
+    ButtonFluentT &pos(int16_t x, int16_t y)
     {
         PIPGUI_FLUENT_GUARD(ButtonFluentT<IsUpdate>);
         _x = x;
@@ -172,7 +176,9 @@ struct ProgressBarFluentT
     {
     }
 
-    ProgressBarFluentT &at(int16_t x, int16_t y)
+    ~ProgressBarFluentT() { draw(); }
+
+    ProgressBarFluentT &pos(int16_t x, int16_t y)
     {
         PIPGUI_FLUENT_GUARD(ProgressBarFluentT<IsUpdate>);
         _x = x;
@@ -264,7 +270,9 @@ struct CircularProgressBarFluentT
     {
     }
 
-    CircularProgressBarFluentT &at(int16_t x, int16_t y)
+    ~CircularProgressBarFluentT() { draw(); }
+
+    CircularProgressBarFluentT &pos(int16_t x, int16_t y)
     {
         PIPGUI_FLUENT_GUARD(CircularProgressBarFluentT<IsUpdate>);
         _x = x;
@@ -342,7 +350,9 @@ struct ScrollDotsFluentT
     ScrollDotsFluentT(GUI *g)
         : _gui(g), _x(0), _y(0), _count(0), _activeIndex(0), _prevIndex(0), _animProgress(0), _animate(false), _animDirection(0),
           _activeColor(0xFFFF), _inactiveColor(0x7BEF), _dotRadius(3), _spacing(14), _activeWidth(18), _consumed(false) {}
-    ScrollDotsFluentT &at(int16_t x, int16_t y)
+
+    ~ScrollDotsFluentT() { draw(); }
+    ScrollDotsFluentT &pos(int16_t x, int16_t y)
     {
         PIPGUI_FLUENT_GUARD(ScrollDotsFluentT<IsUpdate>);
         _x = x;
@@ -439,6 +449,8 @@ struct ToastFluent
           _iconSizePx(20),
           _consumed(false) {}
 
+    ~ToastFluent() { show(); }
+
     ToastFluent &text(const String &t)
     {
         PIPGUI_FLUENT_GUARD(ToastFluent);
@@ -492,7 +504,9 @@ struct DrawIconFluent
     {
     }
 
-    DrawIconFluent &at(int16_t x, int16_t y)
+    ~DrawIconFluent() { draw(); }
+
+    DrawIconFluent &pos(int16_t x, int16_t y)
     {
         PIPGUI_FLUENT_GUARD(DrawIconFluent);
         _x = x;

@@ -1,4 +1,4 @@
-﻿#include <pipGUI/core/api/pipGUI.hpp>
+#include <pipGUI/core/api/pipGUI.hpp>
 
 namespace pipgui
 {
@@ -155,24 +155,10 @@ namespace pipgui
 
         if (x0 == center)
         {
-            int16_t left = 0;
             int16_t availW = _render.screenWidth;
-            int16_t sb = statusBarHeight();
-            if (_flags.statusBarEnabled && sb > 0)
-            {
-                if (_status.pos == Left)
-                {
-                    left += sb;
-                    availW -= sb;
-                }
-                else if (_status.pos == Right)
-                {
-                    availW -= sb;
-                }
-            }
             if (availW < w)
                 availW = w;
-            x0 = left + (availW - w) / 2;
+            x0 = (availW - w) / 2;
         }
         if (y0 == center)
         {
@@ -277,7 +263,7 @@ namespace pipgui
         _render.activeSprite = &_render.sprite;
 
         fillRect()
-            .at((int16_t)(rx - pad), (int16_t)(ry - pad))
+            .pos((int16_t)(rx - pad), (int16_t)(ry - pad))
             .size((int16_t)(w + pad * 2), (int16_t)(h + pad * 2))
             .color((uint16_t)detail::color888To565(_render.bgColor))
             .draw();
@@ -290,5 +276,4 @@ namespace pipgui
         flushDirty();
     }
 }
-
 

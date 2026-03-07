@@ -1,4 +1,4 @@
-﻿#include <pipGUI/core/api/pipGUI.hpp>
+#include <pipGUI/core/api/pipGUI.hpp>
 #include <pipGUI/icons/metrics.hpp>
 
 namespace pipgui
@@ -12,12 +12,9 @@ namespace pipgui
         return 1.0f + 16.0f * t * t * t * t * t;
     }
 
-    void GUI::drawErrorCard(pipcore::Sprite &t,
-                            int16_t x, int16_t y, int16_t w, int16_t h,
+    void GUI::drawErrorCard(int16_t x, int16_t y, int16_t w, int16_t h,
                             const String &title, const String &detail,
-                            uint32_t accentColor,
-                            uint8_t opacity,
-                            int scrollX)
+                            uint32_t accentColor)
     {
         if (w <= 0 || h <= 0)
             return;
@@ -29,7 +26,6 @@ namespace pipgui
         int16_t innerX = x;
         int16_t innerY = y;
         int16_t innerW = w;
-        int16_t innerH = h;
 
         {
             uint16_t msgPx = (uint16_t)max<int16_t>(16, _render.screenHeight / 18);
@@ -38,10 +34,8 @@ namespace pipgui
 
             int16_t mw = 0;
             int16_t mh = 0;
-            int16_t tmpW = 0;
             setFontSize(msgPx);
             measureText(title, mw, mh);
-            measureText(String("Ag"), tmpW, mh);
 
             int16_t mx = innerX + (innerW - mw) / 2;
             if (mx < innerX)
@@ -84,13 +78,7 @@ namespace pipgui
 
                 if (dw > vw)
                 {
-                    int tsw = dw + 20;
-                    int effX = scrollX % tsw;
-                    if (effX > 0)
-                        effX -= tsw;
-                    drawTextAligned(detail, (int16_t)(vx + effX + 10), cy, dim, bg, AlignLeft);
-                    if (vx + effX + dw + 10 < vx + vw)
-                        drawTextAligned(detail, (int16_t)(vx + effX + dw + 20), cy, dim, bg, AlignLeft);
+                    drawTextAligned(detail, (int16_t)(vx + 10), cy, dim, bg, AlignLeft);
                 }
                 else
                 {
@@ -106,9 +94,6 @@ namespace pipgui
     void GUI::showError(const String &title, const String &message, ErrorType type, const String &buttonText)
     {
         uint32_t now = nowMs();
-        _error.title = title;
-        _error.message = message;
-
         _error.type = type;
         _error.buttonText = buttonText;
 
@@ -128,7 +113,7 @@ namespace pipgui
             idx = (_error.count < _error.capacity) ? _error.count++ : (uint8_t)(_error.capacity - 1);
         }
 
-        _error.entries[idx] = {title, message, type, 0, 0};
+        _error.entries[idx] = {title, message, type};
 
         if (!_flags.errorActive)
         {
@@ -137,12 +122,6 @@ namespace pipgui
             _error.nextIndex = 0;
             _flags.errorTransition = 0;
             _error.animStartMs = now;
-            _error.lastScrollMs = now;
-
-            _flags.errorFlashState = 0;
-            _error.lastToggleMs = 0;
-            _error.flashIntervalMs = 0;
-            _error.endMs = 0;
 
             _flags.errorButtonDown = 0;
             _flags.errorAwaitRelease = 1;
@@ -177,10 +156,7 @@ namespace pipgui
 
         if (_error.count == 0)
         {
-            if (!_flags.errorFlashState)
-            {
-                clear(rgb(255, 0, 0));
-            }
+            clear(rgb(255, 0, 0));
             return;
         }
 
@@ -198,7 +174,6 @@ namespace pipgui
             _render.activeSprite = nullptr;
         }
 
-        auto t = getDrawTarget();
         clear(rgb(0, 0, 0));
 
         int16_t sbh = statusBarHeight();
@@ -224,7 +199,7 @@ namespace pipgui
             int16_t ix = (int16_t)(_render.screenWidth / 2) - (int16_t)(iconSize / 2);
             int16_t iy = iconY - (int16_t)(iconSize / 2);
             drawIcon()
-                .at(ix, iy)
+                .pos(ix, iy)
                 .size(iconSize)
                 .icon(iconId)
                 .color(iconColor)
@@ -232,13 +207,10 @@ namespace pipgui
                 .draw();
 
             uint16_t px = (uint16_t)max<int16_t>(18, _render.screenHeight / 12);
-            int16_t hw = 0;
-            int16_t hh = 0;
             setFontSize(px);
 
             uint16_t prevW = fontWeight();
             setFontWeight(Semibold);
-            measureText(String(header), hw, hh);
 
             int16_t ty = iconY + (int16_t)(iconSize / 2 + 10);
             if (ty < (int16_t)(contentTop + 2))
@@ -286,21 +258,15 @@ namespace pipgui
             int curX = (int)(baseX - p * (float)cardW * 1.1f + 0.5f);
             int nxtX = (int)((float)baseX + (1.0f - p) * (float)_render.screenWidth + 0.5f);
 
-            drawErrorCard(*t,
-                          (int16_t)curX, baseY, cardW, cardH,
+            drawErrorCard((int16_t)curX, baseY, cardW, cardH,
                           _error.entries[_error.currentIndex].title,
                           _error.entries[_error.currentIndex].detail,
-                          accentColor,
-                          (uint8_t)(255 * (1.0f - p)),
-                          _error.entries[_error.currentIndex].scrollPos);
+                          accentColor);
 
-            drawErrorCard(*t,
-                          (int16_t)nxtX, baseY, cardW, cardH,
+            drawErrorCard((int16_t)nxtX, baseY, cardW, cardH,
                           _error.entries[_error.nextIndex].title,
                           _error.entries[_error.nextIndex].detail,
-                          accentColor,
-                          (uint8_t)(255 * p),
-                          _error.entries[_error.nextIndex].scrollPos);
+                          accentColor);
 
             dotsActive = _error.nextIndex;
             dotsPrev = _error.currentIndex;
@@ -309,13 +275,10 @@ namespace pipgui
         }
         else
         {
-            drawErrorCard(*t,
-                          baseX, baseY, cardW, cardH,
+            drawErrorCard(baseX, baseY, cardW, cardH,
                           _error.entries[_error.currentIndex].title,
                           _error.entries[_error.currentIndex].detail,
-                          accentColor,
-                          255,
-                          _error.entries[_error.currentIndex].scrollPos);
+                          accentColor);
         }
 
         int16_t btnY = -1;
@@ -358,7 +321,7 @@ namespace pipgui
             if (btnY >= 0 && dotsY > (int16_t)(btnY - 26))
                 dotsY = (int16_t)(btnY - 26);
 
-            drawScrollDots().at(center, dotsY)
+            drawScrollDots().pos(center, dotsY)
                 .count(_error.count)
                 .activeIndex(dotsActive)
                 .prevIndex(dotsPrev)

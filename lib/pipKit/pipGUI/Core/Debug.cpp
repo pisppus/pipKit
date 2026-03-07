@@ -8,9 +8,7 @@ namespace pipgui
 
     DebugMetrics Debug::_metrics;
     bool Debug::_enabled = false;
-    bool Debug::_metricsStatusBarEnabled = false;
     bool Debug::_dirtyRectEnabled = false;
-    uint16_t Debug::_dirtyRectColor = 0x39E7;
     uint16_t Debug::_dirtyRectActiveColor = 0xF81F;
     DirtyRect *Debug::_rects = nullptr;
     uint16_t Debug::_rectCapacity = 0;

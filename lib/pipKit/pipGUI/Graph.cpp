@@ -1,4 +1,4 @@
-﻿#include <pipGUI/core/api/pipGUI.hpp>
+#include <pipGUI/core/api/pipGUI.hpp>
 namespace pipgui
 {
 
@@ -619,7 +619,7 @@ namespace pipgui
             if (stripW > 0)
             {
                 fillRect()
-                    .at(stripX, area->innerY)
+                    .pos(stripX, area->innerY)
                     .size(stripW, area->innerH)
                     .color(area->bgColor)
                     .draw();

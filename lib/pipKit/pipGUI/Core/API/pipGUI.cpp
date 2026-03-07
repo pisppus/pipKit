@@ -25,7 +25,7 @@ namespace pipgui
 
         freeBlurBuffers(plat);
         freeGraphAreas(plat);
-        freeListMenus(plat);
+        freeLists(plat);
         freeTileMenus(plat);
         freeErrors(plat);
         freeScreenState(plat);
@@ -91,8 +91,6 @@ namespace pipgui
                 ptr = nullptr;
             }
         }
-
-        void release() { released = true; }
     };
 
     void GUI::freeBlurBuffers(pipcore::GuiPlatform *plat) noexcept
@@ -135,34 +133,16 @@ namespace pipgui
         }
     }
 
-    void GUI::freeListMenus(pipcore::GuiPlatform *plat) noexcept
+    void GUI::freeLists(pipcore::GuiPlatform *plat) noexcept
     {
-        if (!_screen.listMenus)
+        if (!_screen.lists)
             return;
 
         for (uint16_t i = 0; i < _screen.capacity; ++i)
         {
-            ListMenuState *m = _screen.listMenus[i];
+            ListState *m = _screen.lists[i];
             if (!m)
                 continue;
-
-            if (m->cacheNormal)
-            {
-                for (uint8_t j = 0; j < m->capacity; ++j)
-                    detail::guiFree(plat, m->cacheNormal[j]);
-                detail::guiFree(plat, m->cacheNormal);
-                m->cacheNormal = nullptr;
-            }
-
-            if (m->cacheActive)
-            {
-                for (uint8_t j = 0; j < m->capacity; ++j)
-                    detail::guiFree(plat, m->cacheActive[j]);
-                detail::guiFree(plat, m->cacheActive);
-                m->cacheActive = nullptr;
-            }
-
-            safeFreeArray(plat, m->items, m->capacity);
 
             if (m->viewportSprite)
             {
@@ -172,8 +152,10 @@ namespace pipgui
                 m->viewportSprite = nullptr;
             }
 
-            ObjectGuard<ListMenuState> guard(plat, m);
-            _screen.listMenus[i] = nullptr;
+            safeFreeArray(plat, m->items, m->capacity);
+
+            ObjectGuard<ListState> guard(plat, m);
+            _screen.lists[i] = nullptr;
         }
     }
 
@@ -203,17 +185,17 @@ namespace pipgui
     void GUI::freeScreenState(pipcore::GuiPlatform *plat) noexcept
     {
         freeGraphAreas(plat);
-        freeListMenus(plat);
+        freeLists(plat);
         freeTileMenus(plat);
 
         detail::guiFree(plat, _screen.callbacks);
         detail::guiFree(plat, _screen.graphAreas);
-        detail::guiFree(plat, _screen.listMenus);
+        detail::guiFree(plat, _screen.lists);
         detail::guiFree(plat, _screen.tileMenus);
 
         _screen.callbacks = nullptr;
         _screen.graphAreas = nullptr;
-        _screen.listMenus = nullptr;
+        _screen.lists = nullptr;
         _screen.tileMenus = nullptr;
         _screen.capacity = 0;
     }
@@ -249,6 +231,16 @@ namespace pipgui
         _gui->configureDisplay(_cfg);
     }
 
+    void ListInputFluent::apply()
+    {
+        if (_consumed)
+            return;
+        _consumed = true;
+        if (!_gui)
+            return;
+        _gui->handleListInput(_screenId, _nextPressed, _prevPressed, _nextDown, _prevDown);
+    }
+
     void GUI::begin(uint8_t rotation, uint16_t bgColor)
     {
         pipcore::GuiPlatform *plat = pipcore::GetPlatform();
@@ -259,7 +251,9 @@ namespace pipgui
         Debug::setDirtyRectEnabled(true);
 #endif
 #if defined(PIPGUI_DEBUG_METRICS) && (PIPGUI_DEBUG_METRICS)
-        setDebugMetrics(true);
+        _flags.statusBarDebugMetrics = true;
+        Debug::init();
+        _status.dirtyMask = StatusBarDirtyAll;
 #endif
 
         if (_disp.cfgConfigured)
@@ -330,10 +324,6 @@ namespace pipgui
         return pipcore::GetPlatform()->nowMs();
     }
 
-    void GUI::setPlatform(pipcore::GuiPlatform *)
-    {
-    }
-
     pipcore::GuiPlatform *GUI::platform() const
     {
         return pipcore::GetPlatform();
@@ -363,15 +353,5 @@ namespace pipgui
     {
         _screen.anim = anim;
         _screen.animDurationMs = durationMs;
-    }
-
-    void GUI::setDebugMetrics(bool enabled)
-    {
-        _flags.statusBarDebugMetrics = enabled;
-        Debug::setMetricsStatusBarEnabled(enabled);
-        if (enabled)
-            Debug::init();
-        _status.dirtyMask = StatusBarDirtyAll;
-        requestRedraw();
     }
 }

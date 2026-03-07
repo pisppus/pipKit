@@ -18,12 +18,12 @@
     friend struct FillEllipseFluent;                \
     friend struct DrawTriangleFluent;               \
     friend struct FillTriangleFluent;               \
-    friend struct DrawRoundTriangleFluent;           \
-    friend struct FillRoundTriangleFluent;          \
     friend struct DrawSquircleFluent;               \
     friend struct FillSquircleFluent;               \
     friend struct DrawIconFluent;                   \
     friend struct ToastFluent;                      \
+    friend struct ConfigureListFluent;              \
+    friend struct ListInputFluent;                  \
     template <bool IsUpdate>                        \
     friend struct BlurRegionFluentT;                 \
     template <bool IsUpdate>                        \
@@ -38,7 +38,6 @@ PIPGUI_FRIEND_FLUENT_BUILDERS
 
 struct DisplayState
 {
-    pipcore::GuiPlatform *platform = nullptr;
     pipcore::GuiDisplay *display = nullptr;
     pipcore::GuiDisplayConfig cfg;
     bool cfgConfigured = false;
@@ -55,6 +54,7 @@ struct RenderState
     uint16_t screenWidth = 0;
     uint16_t screenHeight = 0;
     uint32_t bgColor = 0;
+    uint16_t bgColor565 = 0;
 } _render;
 
 struct SavedRenderState
@@ -87,7 +87,7 @@ struct ScreenState
 {
     ScreenCallback *callbacks = nullptr;
     GraphArea **graphAreas = nullptr;
-    ListMenuState **listMenus = nullptr;
+    ListState **lists = nullptr;
     TileMenuState **tileMenus = nullptr;
     uint16_t capacity = 0;
     uint8_t current = INVALID_SCREEN_ID;
@@ -130,7 +130,6 @@ struct ErrorEntry
 {
     String title, detail;
     ErrorType type;
-    int16_t scrollPos, textWidth;
 };
 struct ErrorState
 {
@@ -140,14 +139,8 @@ struct ErrorState
     uint8_t currentIndex = 0;
     uint8_t nextIndex = 0;
     uint32_t animStartMs = 0;
-    uint32_t lastScrollMs = 0;
     ErrorType type = Warning;
-    String title;
-    String message;
     String buttonText;
-    uint32_t lastToggleMs = 0;
-    uint32_t flashIntervalMs = 0;
-    uint32_t endMs = 0;
     ButtonVisualState buttonState;
 } _error;
 
@@ -209,10 +202,8 @@ struct StatusBarState
 struct BlurState
 {
     uint16_t *prevOrig = nullptr;
-    uint32_t prevOrigLen = 0;
     int16_t prevX = 0, prevY = 0;
     int16_t prevW = 0, prevH = 0;
-    uint8_t prevScale = 1;
 
     uint16_t *smallIn = nullptr;
     uint16_t *smallTmp = nullptr;
@@ -229,20 +220,14 @@ struct BlurState
 
 struct Flags
 {
-    unsigned inited : 1;
-    unsigned displayInited : 1;
     unsigned spriteEnabled : 1;
     unsigned renderToSprite : 1;
     unsigned screenSpritesEnabled : 1;
     unsigned needRedraw : 1;
     unsigned bootActive : 1;
-    unsigned showBoot : 1;
-    unsigned showScreenTransition : 1;
     unsigned screenTransition : 1;
-    unsigned showError : 1;
     unsigned errorActive : 1;
     unsigned errorTransition : 1;
-    unsigned errorFlashState : 1;
     unsigned errorButtonDown : 1;
     unsigned errorAwaitRelease : 1;
     unsigned notifActive : 1;
@@ -258,11 +243,6 @@ struct Flags
 uint32_t nowMs() const;
 
 // --- Initialization helpers ---
-bool initDisplay(
-    pipcore::GuiPlatform *plat, uint8_t rotation,
-    uint16_t bgColor);
-
-bool initSprites();
 void initFonts();
 
 pipcore::Sprite *getDrawTarget();
@@ -459,23 +439,25 @@ void updateGlowRect(
 
 // --- UI: Menus & Graphs ---
 GraphArea *ensureGraphArea(uint8_t screenId);
-ListMenuState *ensureListMenu(uint8_t screenId);
+ListState *ensureList(uint8_t screenId);
 TileMenuState *ensureTileMenu(uint8_t screenId);
-ListMenuState *getListMenu(uint8_t screenId);
+ListState *getList(uint8_t screenId);
 TileMenuState *getTileMenu(uint8_t screenId);
 
-void configureListMenu(uint8_t screenId, uint8_t parentScreen, const ListMenuItemDef *items, uint8_t itemCount);
+void handleListInput(
+    uint8_t screenId, bool nextPressed,
+    bool prevPressed, bool nextDown,
+    bool prevDown);
+
 void configureTileMenu(uint8_t screenId, uint8_t parentScreen, const TileMenuItemDef *items, uint8_t itemCount);
 bool ensureTileCapacity(TileMenuState &m, uint8_t need);
 void setTileMenuLayout(uint8_t screenId, uint8_t layoutCols, uint8_t layoutRows, const TileLayoutCell *tiles, uint8_t count);
 
 void freeGraphAreas(pipcore::GuiPlatform *plat) noexcept;
-void freeListMenus(pipcore::GuiPlatform *plat) noexcept;
+void freeLists(pipcore::GuiPlatform *plat) noexcept;
 void freeTileMenus(pipcore::GuiPlatform *plat) noexcept;
 
 // --- UI: Status Bar ---
-void freeStatusBarIcons(pipcore::GuiPlatform *plat) noexcept;
-
 // --- UI: Toasts & Notifications ---
 void renderToastOverlay();
 void renderNotificationOverlay();
@@ -485,6 +467,6 @@ void showToastInternal(const String &text, uint32_t durationMs, bool fromTop, Ic
 void renderErrorFrame(uint32_t now);
 bool ensureErrorCapacity(uint8_t need);
 void freeErrors(pipcore::GuiPlatform *plat) noexcept;
-void drawErrorCard(pipcore::Sprite &t, int16_t x, int16_t y, int16_t w, int16_t h,
+void drawErrorCard(int16_t x, int16_t y, int16_t w, int16_t h,
                    const String &title, const String &detail,
-                   uint32_t accentColor, uint8_t opacity, int scrollX);
+                   uint32_t accentColor);

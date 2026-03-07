@@ -517,7 +517,7 @@ namespace pipgui
         _flags.renderToSprite = 1;
         _render.activeSprite = &_render.sprite;
 
-        fillRect().at(rx - pad, ry - pad).size(tw + pad * 2, th + pad * 2).color(bg565).draw();
+        fillRect().pos(rx - pad, ry - pad).size(tw + pad * 2, th + pad * 2).color(bg565).draw();
         drawTextImmediate(text, rx, ry, tw, th, fg565, bg565, align);
 
         _flags.renderToSprite = prevRender;

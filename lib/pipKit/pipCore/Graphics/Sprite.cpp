@@ -80,12 +80,6 @@ namespace pipcore
             *h = _clipH;
     }
 
-    bool Sprite::clipTest(int16_t x, int16_t y) const
-    {
-        return (uint16_t)(x - _clipX) < (uint16_t)_clipW &&
-               (uint16_t)(y - _clipY) < (uint16_t)_clipH;
-    }
-
     void Sprite::pushSprite(Sprite *dst, int16_t x, int16_t y) const
     {
         if (!dst || !_buf || !dst->_buf)

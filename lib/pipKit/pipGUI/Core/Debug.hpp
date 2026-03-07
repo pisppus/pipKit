@@ -34,15 +34,10 @@ namespace pipgui
         static bool isEnabled() { return _enabled; }
         static void setEnabled(bool enable) { _enabled = enable; }
 
-        static void setMetricsStatusBarEnabled(bool enabled) { _metricsStatusBarEnabled = enabled; }
-        static bool isMetricsStatusBarEnabled() { return _metricsStatusBarEnabled; }
-
         static void setDirtyRectEnabled(bool enabled) { _dirtyRectEnabled = enabled; }
         static bool dirtyRectEnabled() { return _dirtyRectEnabled; }
 
-        static void setDirtyRectColor(uint16_t color) { _dirtyRectColor = color; }
         static void setDirtyRectActiveColor(uint16_t color) { _dirtyRectActiveColor = color; }
-        static uint16_t dirtyRectColor() { return _dirtyRectColor; }
         static uint16_t dirtyRectActiveColor() { return _dirtyRectActiveColor; }
 
         static void recordDirtyRect(int16_t x, int16_t y, int16_t w, int16_t h);
@@ -55,10 +50,8 @@ namespace pipgui
     private:
         static DebugMetrics _metrics;
         static bool _enabled;
-        static bool _metricsStatusBarEnabled;
 
         static bool _dirtyRectEnabled;
-        static uint16_t _dirtyRectColor;
         static uint16_t _dirtyRectActiveColor;
         static DirtyRect *_rects;
         static uint16_t _rectCapacity;

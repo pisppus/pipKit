@@ -52,10 +52,6 @@ namespace pipcore
         void hardReset();
         void setRotationInternal(uint8_t rotation);
 
-        void writeCmd(uint8_t cmd);
-        void writeData(const void *data, size_t len);
-        void writeDataQueued(const void *data, size_t len);
-
     private:
         ISt7789Transport *_transport = nullptr;
 

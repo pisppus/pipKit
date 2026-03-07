@@ -58,13 +58,11 @@ namespace pipgui
 
     int16_t GUI::AutoX(int32_t contentWidth) const
     {
-        int16_t sb = statusBarHeight();
-        int16_t left = (_flags.statusBarEnabled && _status.pos == Left) ? sb : 0;
-        int16_t availW = _render.screenWidth - ((_flags.statusBarEnabled && (_status.pos == Left || _status.pos == Right)) ? sb : 0);
+        int16_t availW = _render.screenWidth;
 
         if (contentWidth > availW)
             availW = (int16_t)contentWidth;
-        return left + (availW - (int16_t)contentWidth) / 2;
+        return (availW - (int16_t)contentWidth) / 2;
     }
 
     int16_t GUI::AutoY(int32_t contentHeight) const
@@ -81,6 +79,7 @@ namespace pipgui
     void GUI::clear(uint16_t color)
     {
         _render.bgColor = detail::color565To888(color);
+        _render.bgColor565 = color;
 
         if (!_flags.spriteEnabled)
             return;

@@ -1,4 +1,4 @@
-﻿#include <pipGUI/core/api/pipGUI.hpp>
+#include <pipGUI/core/api/pipGUI.hpp>
 #include <pipGUI/core/Debug.hpp>
 #include <pipGUI/icons/metrics.hpp>
 
@@ -381,7 +381,7 @@ namespace pipgui
         if (_status.style == StatusBarStyleSolid)
         {
             fillRect()
-                .at(x, y)
+                .pos(x, y)
                 .size(w, h)
                 .color(bg565)
                 .draw();
@@ -506,7 +506,7 @@ namespace pipgui
             uint16_t fillCol = (_status.batteryLevel <= 20) ? 0xF800 : 0x07E0;
 
             drawIcon()
-                .at(bx, by)
+                .pos(bx, by)
                 .size((uint16_t)iconSize)
                 .icon(battery_layer2)
                 .color(fillCol)
@@ -514,20 +514,20 @@ namespace pipgui
                 .draw();
             int16_t cutX = (int16_t)(bx + (int32_t)iconSize * _status.batteryLevel / 100);
             fillRect()
-                .at(cutX, by)
+                .pos(cutX, by)
                 .size((int16_t)(bx + iconSize - cutX), (int16_t)iconSize)
                 .color(bg565)
                 .draw();
 
             drawIcon()
-                .at(bx, by)
+                .pos(bx, by)
                 .size((uint16_t)iconSize)
                 .icon(battery_layer0)
                 .color(frameColor)
                 .bgColor(bg565)
                 .draw();
             drawIcon()
-                .at(bx, by)
+                .pos(bx, by)
                 .size((uint16_t)iconSize)
                 .icon(battery_layer1)
                 .color(frameColor)

@@ -39,8 +39,6 @@ namespace pipgui
 
     namespace detail
     {
-        static inline void guiFree(pipcore::GuiPlatform *plat, void *ptr) noexcept;
-
         static inline void *guiAlloc(pipcore::GuiPlatform *plat, size_t bytes, pipcore::GuiAllocCaps caps) noexcept
         {
             (void)plat;
@@ -51,22 +49,6 @@ namespace pipgui
             if (caps != pipcore::GuiAllocCaps::Default)
                 return p->guiAlloc(bytes, pipcore::GuiAllocCaps::Default);
             return nullptr;
-        }
-
-        template <typename T>
-        static inline T *alignedGuiAlloc(pipcore::GuiPlatform *plat, size_t count = 1) noexcept
-        {
-            constexpr size_t alignment = alignof(T);
-            size_t bytes = sizeof(T) * count;
-            void *ptr = guiAlloc(plat, bytes, pipcore::GuiAllocCaps::Default);
-            if (!ptr)
-                return nullptr;
-            if ((uintptr_t)ptr % alignment != 0)
-            {
-                guiFree(plat, ptr);
-                return nullptr;
-            }
-            return static_cast<T *>(ptr);
         }
 
         static inline void guiFree(pipcore::GuiPlatform *plat, void *ptr) noexcept
@@ -305,12 +287,10 @@ namespace pipgui
     using BacklightCallback = void (*)(uint16_t level);
     using StatusBarCustomCallback = void (*)(GUI &ui, int16_t x, int16_t y, int16_t w, int16_t h);
 
-    struct ButtonVisualStyle
+    struct ScreenDef
     {
-        uint16_t fontPx = 0;
-        uint8_t iconScale = 1;
-        uint16_t bgColor, bgPressedColor, bgDisabledColor, textColor;
-        uint8_t radius, font;
+        uint8_t id;
+        ScreenCallback cb;
     };
 
     struct ButtonVisualState
@@ -364,14 +344,25 @@ namespace pipgui
         uint16_t *sampleHead;
     };
 
-    struct ListMenuItemDef
+    struct ListItemDef
     {
         const char *title;
         const char *subtitle;
         uint8_t targetScreen;
+        uint16_t iconId;
+
+        constexpr ListItemDef(const char *t, const char *s, uint8_t target) noexcept
+            : title(t), subtitle(s), targetScreen(target), iconId(0xFFFF)
+        {
+        }
+
+        constexpr ListItemDef(uint16_t icon, const char *t, const char *s, uint8_t target) noexcept
+            : title(t), subtitle(s), targetScreen(target), iconId(icon)
+        {
+        }
     };
 
-    enum ListMenuMode : uint8_t
+    enum ListMode : uint8_t
     {
         Cards,
         Plain
@@ -398,10 +389,10 @@ namespace pipgui
         uint8_t rowSpan;
     };
 
-    struct ListMenuStyle
+    struct ListStyle
     {
-        uint32_t cardColor;
-        uint32_t cardActiveColor;
+        uint16_t cardColor;
+        uint16_t cardActiveColor;
         uint8_t radius;
         uint8_t spacing;
         int16_t cardWidth;
@@ -409,7 +400,7 @@ namespace pipgui
         uint16_t titleFontPx;
         uint16_t subtitleFontPx;
         uint16_t lineGapPx;
-        ListMenuMode mode;
+        ListMode mode;
     };
 
     struct TileMenuStyle
@@ -427,13 +418,23 @@ namespace pipgui
         TileContentMode contentMode;
     };
 
-    struct ListMenuState
+    struct ListState
     {
         struct Item
         {
             String title;
             String subtitle;
             uint8_t targetScreen;
+            uint16_t iconId = 0xFFFF;
+
+            int16_t titleW = 0;
+            int16_t titleH = 0;
+            int16_t subW = 0;
+            int16_t subH = 0;
+            uint16_t cachedTitlePx = 0;
+            uint16_t cachedSubPx = 0;
+            uint16_t cachedTitleWeight = 0;
+            uint16_t cachedSubWeight = 0;
         };
 
         bool configured;
@@ -443,6 +444,7 @@ namespace pipgui
 
         float scrollPos;
         float targetScroll;
+        float scrollVel;
 
         uint32_t nextHoldStartMs;
         uint32_t prevHoldStartMs;
@@ -451,7 +453,7 @@ namespace pipgui
         bool lastNextDown;
         bool lastPrevDown;
 
-        ListMenuStyle style;
+        ListStyle style;
 
         uint8_t scrollbarAlpha;
         uint32_t lastScrollActivityMs;
@@ -459,26 +461,9 @@ namespace pipgui
         uint8_t capacity;
         Item *items;
 
-        uint16_t **cacheNormal;
-        uint16_t **cacheActive;
-
-        uint16_t cacheW;
-        uint16_t cacheH;
-        bool cacheValid;
-
         pipcore::Sprite *viewportSprite;
-        int16_t viewportX;
-        int16_t viewportY;
-        int16_t viewportW;
-        int16_t viewportH;
-        int16_t viewportCardW;
-        int16_t viewportCardH;
-        int16_t viewportItemSpanPx;
-        uint32_t viewportBgColor;
-        float viewportScrollPos;
-        int32_t viewportScrollPx;
-        uint8_t viewportSelectedIndex;
-        bool viewportValid;
+
+        uint32_t lastUpdateMs;
     };
 
     struct TileMenuState
@@ -607,6 +592,126 @@ namespace pipgui
 
         void apply();
     };
+
+    struct ListInputFluent
+    {
+        GUI *_gui;
+        uint8_t _screenId;
+        bool _nextPressed;
+        bool _prevPressed;
+        bool _nextDown;
+        bool _prevDown;
+        bool _consumed;
+
+        ListInputFluent(GUI *g, uint8_t screenId)
+            : _gui(g), _screenId(screenId), _nextPressed(false), _prevPressed(false),
+              _nextDown(false), _prevDown(false), _consumed(false)
+        {
+        }
+
+        ListInputFluent &nextPressed(bool v)
+        {
+            if (_consumed) return *this;
+            _nextPressed = v;
+            return *this;
+        }
+
+        ListInputFluent &prevPressed(bool v)
+        {
+            if (_consumed) return *this;
+            _prevPressed = v;
+            return *this;
+        }
+
+        ListInputFluent &nextDown(bool v)
+        {
+            if (_consumed) return *this;
+            _nextDown = v;
+            return *this;
+        }
+
+        ListInputFluent &prevDown(bool v)
+        {
+            if (_consumed) return *this;
+            _prevDown = v;
+            return *this;
+        }
+
+        ~ListInputFluent() { apply(); }
+
+        void apply();
+    };
+
+    struct ConfigureListFluent
+    {
+        GUI *_gui;
+        uint8_t _screenId;
+        const ListItemDef *_items;
+        uint8_t _itemCount;
+        uint8_t _parentScreen;
+        uint16_t _cardColor;
+        uint16_t _cardActiveColor;
+        uint8_t _radius;
+        int16_t _cardWidth;
+        int16_t _cardHeight;
+        ListMode _mode;
+        bool _consumed;
+
+        ConfigureListFluent(GUI *g, uint8_t screenId, std::initializer_list<ListItemDef> items)
+            : _gui(g), _screenId(screenId), _items(items.begin()), _itemCount(static_cast<uint8_t>(items.size())),
+              _parentScreen(INVALID_SCREEN_ID), _cardColor(0), _cardActiveColor(0), _radius(8),
+              _cardWidth(0), _cardHeight(0), _mode(Cards), _consumed(false)
+        {
+        }
+
+        ConfigureListFluent &parent(uint8_t parentScreen)
+        {
+            if (_consumed) return *this;
+            _parentScreen = parentScreen;
+            return *this;
+        }
+
+        ConfigureListFluent &cardColor(uint16_t color565)
+        {
+            if (_consumed) return *this;
+            _cardColor = color565;
+            return *this;
+        }
+
+        ConfigureListFluent &activeColor(uint16_t color565)
+        {
+            if (_consumed) return *this;
+            _cardActiveColor = color565;
+            return *this;
+        }
+
+        ConfigureListFluent &radius(uint8_t px)
+        {
+            if (_consumed) return *this;
+            _radius = px;
+            return *this;
+        }
+
+        ConfigureListFluent &cardSize(int16_t width, int16_t height)
+        {
+            if (_consumed) return *this;
+            _cardWidth = width;
+            _cardHeight = height;
+            return *this;
+        }
+
+        ConfigureListFluent &mode(ListMode m)
+        {
+            if (_consumed) return *this;
+            _mode = m;
+            return *this;
+        }
+
+        ~ConfigureListFluent() { apply(); }
+
+        void apply();
+    };
+
 
 #define PIPGUI_FLUENT_BUILDERS_INC 1
 #include "parts/Builders.inc"

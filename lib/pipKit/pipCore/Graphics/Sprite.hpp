@@ -77,7 +77,6 @@ namespace pipcore
         }
 
     private:
-        bool clipTest(int16_t x, int16_t y) const;
         void clipNormalize();
         inline void fillRow(uint16_t *dst, int16_t w, uint16_t v);
 

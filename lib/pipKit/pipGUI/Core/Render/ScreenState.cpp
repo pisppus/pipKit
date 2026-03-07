@@ -28,12 +28,12 @@ namespace pipgui
         area.speed = 1.0f;
         area.direction = pipgui::LeftToRight;
     }
-    static void initListMenuDefaults(pipgui::ListMenuState &menu)
+    static void initListDefaults(pipgui::ListState &menu)
     {
         menu = {};
         menu.parentScreen = INVALID_SCREEN_ID;
         menu.style.radius = 8;
-        menu.style.spacing = 8;
+        menu.style.spacing = 6;
         menu.style.mode = pipgui::Cards;
     }
     static void initTileMenuDefaults(pipgui::TileMenuState &tile)
@@ -41,7 +41,7 @@ namespace pipgui
         tile = {};
         tile.parentScreen = INVALID_SCREEN_ID;
         tile.style.radius = 8;
-        tile.style.spacing = 8;
+        tile.style.spacing = 6;
         tile.style.columns = 2;
         tile.style.contentMode = pipgui::TextSubtitle;
     }
@@ -66,7 +66,7 @@ namespace pipgui
             newCap = (uint16_t)(id + 1);
         ScreenCallback *newScreens = (ScreenCallback *)detail::guiAlloc(plat, sizeof(ScreenCallback) * newCap, pipcore::GuiAllocCaps::Default);
         GraphArea **newGraphs = (GraphArea **)detail::guiAlloc(plat, sizeof(GraphArea *) * newCap, pipcore::GuiAllocCaps::Default);
-        ListMenuState **newLists = (ListMenuState **)detail::guiAlloc(plat, sizeof(ListMenuState *) * newCap, pipcore::GuiAllocCaps::Default);
+        ListState **newLists = (ListState **)detail::guiAlloc(plat, sizeof(ListState *) * newCap, pipcore::GuiAllocCaps::Default);
         TileMenuState **newTiles = (TileMenuState **)detail::guiAlloc(plat, sizeof(TileMenuState *) * newCap, pipcore::GuiAllocCaps::Default);
         if (!newScreens || !newGraphs || !newLists || !newTiles)
         {
@@ -95,8 +95,8 @@ namespace pipgui
                     newScreens[i] = _screen.callbacks[i];
                 if (_screen.graphAreas)
                     newGraphs[i] = _screen.graphAreas[i];
-                if (_screen.listMenus)
-                    newLists[i] = _screen.listMenus[i];
+                if (_screen.lists)
+                    newLists[i] = _screen.lists[i];
                 if (_screen.tileMenus)
                     newTiles[i] = _screen.tileMenus[i];
             }
@@ -105,13 +105,13 @@ namespace pipgui
             detail::guiFree(plat, _screen.callbacks);
         if (_screen.graphAreas)
             detail::guiFree(plat, _screen.graphAreas);
-        if (_screen.listMenus)
-            detail::guiFree(plat, _screen.listMenus);
+        if (_screen.lists)
+            detail::guiFree(plat, _screen.lists);
         if (_screen.tileMenus)
             detail::guiFree(plat, _screen.tileMenus);
         _screen.callbacks = newScreens;
         _screen.graphAreas = newGraphs;
-        _screen.listMenus = newLists;
+        _screen.lists = newLists;
         _screen.tileMenus = newTiles;
         _screen.capacity = newCap;
     }
@@ -121,10 +121,10 @@ namespace pipgui
         ensureScreenState(screenId);
         return ensureLazy<GraphArea>(screenId, _screen.graphAreas, _screen.capacity, initGraphAreaDefaults);
     }
-    ListMenuState *GUI::ensureListMenu(uint8_t screenId)
+    ListState *GUI::ensureList(uint8_t screenId)
     {
         ensureScreenState(screenId);
-        return ensureLazy<ListMenuState>(screenId, _screen.listMenus, _screen.capacity, initListMenuDefaults);
+        return ensureLazy<ListState>(screenId, _screen.lists, _screen.capacity, initListDefaults);
     }
     TileMenuState *GUI::ensureTileMenu(uint8_t screenId)
     {
@@ -132,11 +132,11 @@ namespace pipgui
         return ensureLazy<TileMenuState>(screenId, _screen.tileMenus, _screen.capacity, initTileMenuDefaults);
     }
 
-    ListMenuState *GUI::getListMenu(uint8_t screenId)
+    ListState *GUI::getList(uint8_t screenId)
     {
-        if (screenId >= _screen.capacity || !_screen.listMenus)
+        if (screenId >= _screen.capacity || !_screen.lists)
             return nullptr;
-        return _screen.listMenus[screenId];
+        return _screen.lists[screenId];
     }
     TileMenuState *GUI::getTileMenu(uint8_t screenId)
     {

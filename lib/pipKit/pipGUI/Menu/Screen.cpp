@@ -1,4 +1,4 @@
-﻿#include <pipGUI/core/api/pipGUI.hpp>
+#include <pipGUI/core/api/pipGUI.hpp>
 #include <math.h>
 #include <algorithm>
 #include <cstdint>
@@ -61,6 +61,13 @@ namespace pipgui
         ensureScreenState(id);
         if (id < _screen.capacity && _screen.callbacks)
             _screen.callbacks[id] = cb;
+    }
+
+    GUI &GUI::regScreens(std::initializer_list<ScreenDef> screens)
+    {
+        for (const auto &s : screens)
+            regScreen(s.id, s.cb);
+        return *this;
     }
 
     void GUI::setScreen(uint8_t id)
@@ -165,7 +172,7 @@ namespace pipgui
             pipcore::Sprite *prev = _render.activeSprite;
             _render.activeSprite = &_render.screenFromSprite;
             fillRect()
-                .at(0, 0)
+                .pos(0, 0)
                 .size(fw, fh)
                 .color(detail::color888To565(_render.bgColor))
                 .draw();
@@ -183,7 +190,7 @@ namespace pipgui
             pipcore::Sprite *prev = _render.activeSprite;
             _render.activeSprite = &_render.screenToSprite;
             fillRect()
-                .at(0, 0)
+                .pos(0, 0)
                 .size(tw, th)
                 .color(detail::color888To565(_render.bgColor))
                 .draw();
@@ -347,10 +354,10 @@ namespace pipgui
             {
                 if (_disp.display)
                 {
-                    ListMenuState *lm = getListMenu(_screen.current);
+                    ListState *lm = getList(_screen.current);
                     if (lm && lm->configured && lm->itemCount > 0)
                     {
-                        bool more = updateListMenu(_screen.current);
+                        bool more = updateList(_screen.current);
                         updateStatusBar();
                         if (more)
                             _flags.needRedraw = 1;
@@ -398,4 +405,3 @@ namespace pipgui
         loop();
     }
 }
-

@@ -17,7 +17,8 @@
           _color(0),
           _radius(0), _radiusTL(0), _radiusTR(0), _radiusBR(0), _radiusBL(0),
           _perCorner(false), _consumed(false) {}
-    FillRectFluent &at(int16_t x, int16_t y)
+    ~FillRectFluent() { draw(); }
+    FillRectFluent &pos(int16_t x, int16_t y)
     {
         PIPGUI_FLUENT_GUARD(FillRectFluent);
         _x = x;
@@ -74,7 +75,8 @@ struct DrawRectFluent
           _color(0),
           _radius(0), _radiusTL(0), _radiusTR(0), _radiusBR(0), _radiusBL(0),
           _perCorner(false), _consumed(false) {}
-    DrawRectFluent &at(int16_t x, int16_t y)
+    ~DrawRectFluent() { draw(); }
+    DrawRectFluent &pos(int16_t x, int16_t y)
     {
         PIPGUI_FLUENT_GUARD(DrawRectFluent);
         _x = x;
@@ -123,7 +125,8 @@ struct GradientVerticalFluent
     uint32_t _topColor, _bottomColor;
     bool _consumed;
     GradientVerticalFluent(GUI *g) : _gui(g), _x(0), _y(0), _w(0), _h(0), _topColor(0), _bottomColor(0), _consumed(false) {}
-    GradientVerticalFluent &at(int16_t x, int16_t y)
+    ~GradientVerticalFluent() { draw(); }
+    GradientVerticalFluent &pos(int16_t x, int16_t y)
     {
         PIPGUI_FLUENT_GUARD(GradientVerticalFluent);
         _x = x;
@@ -171,7 +174,8 @@ struct GradientHorizontalFluent
     uint32_t _leftColor, _rightColor;
     bool _consumed;
     GradientHorizontalFluent(GUI *g) : _gui(g), _x(0), _y(0), _w(0), _h(0), _leftColor(0), _rightColor(0), _consumed(false) {}
-    GradientHorizontalFluent &at(int16_t x, int16_t y)
+    ~GradientHorizontalFluent() { draw(); }
+    GradientHorizontalFluent &pos(int16_t x, int16_t y)
     {
         PIPGUI_FLUENT_GUARD(GradientHorizontalFluent);
         _x = x;
@@ -219,7 +223,8 @@ struct GradientCornersFluent
     uint32_t _c00, _c10, _c01, _c11;
     bool _consumed;
     GradientCornersFluent(GUI *g) : _gui(g), _x(0), _y(0), _w(0), _h(0), _c00(0), _c10(0), _c01(0), _c11(0), _consumed(false) {}
-    GradientCornersFluent &at(int16_t x, int16_t y)
+    ~GradientCornersFluent() { draw(); }
+    GradientCornersFluent &pos(int16_t x, int16_t y)
     {
         PIPGUI_FLUENT_GUARD(GradientCornersFluent);
         _x = x;
@@ -291,7 +296,8 @@ struct GradientDiagonalFluent
     uint32_t _tlColor, _brColor;
     bool _consumed;
     GradientDiagonalFluent(GUI *g) : _gui(g), _x(0), _y(0), _w(0), _h(0), _tlColor(0), _brColor(0), _consumed(false) {}
-    GradientDiagonalFluent &at(int16_t x, int16_t y)
+    ~GradientDiagonalFluent() { draw(); }
+    GradientDiagonalFluent &pos(int16_t x, int16_t y)
     {
         PIPGUI_FLUENT_GUARD(GradientDiagonalFluent);
         _x = x;
@@ -341,7 +347,8 @@ struct GradientRadialFluent
     uint32_t _innerColor, _outerColor;
     bool _consumed;
     GradientRadialFluent(GUI *g) : _gui(g), _x(0), _y(0), _w(0), _h(0), _cx(0), _cy(0), _radius(0), _innerColor(0), _outerColor(0), _consumed(false) {}
-    GradientRadialFluent &at(int16_t x, int16_t y)
+    ~GradientRadialFluent() { draw(); }
+    GradientRadialFluent &pos(int16_t x, int16_t y)
     {
         PIPGUI_FLUENT_GUARD(GradientRadialFluent);
         _x = x;
@@ -433,7 +440,8 @@ struct DrawCircleFluent
     uint16_t _color;
     bool _consumed;
     DrawCircleFluent(GUI *g) : _gui(g), _cx(0), _cy(0), _r(0), _color(0), _consumed(false) {}
-    DrawCircleFluent &at(int16_t cx, int16_t cy)
+    ~DrawCircleFluent() { draw(); }
+    DrawCircleFluent &pos(int16_t cx, int16_t cy)
     {
         PIPGUI_FLUENT_GUARD(DrawCircleFluent);
         _cx = cx;
@@ -463,7 +471,8 @@ struct FillCircleFluent
     uint16_t _color;
     bool _consumed;
     FillCircleFluent(GUI *g) : _gui(g), _cx(0), _cy(0), _r(0), _color(0), _consumed(false) {}
-    FillCircleFluent &at(int16_t cx, int16_t cy)
+    ~FillCircleFluent() { draw(); }
+    FillCircleFluent &pos(int16_t cx, int16_t cy)
     {
         PIPGUI_FLUENT_GUARD(FillCircleFluent);
         _cx = cx;
@@ -494,7 +503,8 @@ struct DrawArcFluent
     uint16_t _color;
     bool _consumed;
     DrawArcFluent(GUI *g) : _gui(g), _cx(0), _cy(0), _r(0), _startDeg(0), _endDeg(360), _color(0), _consumed(false) {}
-    DrawArcFluent &at(int16_t cx, int16_t cy)
+    ~DrawArcFluent() { draw(); }
+    DrawArcFluent &pos(int16_t cx, int16_t cy)
     {
         PIPGUI_FLUENT_GUARD(DrawArcFluent);
         _cx = cx;
@@ -531,11 +541,13 @@ struct DrawArcFluent
 struct DrawEllipseFluent
 {
     GUI *_gui;
-    int16_t _cx, _cy, _rx, _ry;
+    int16_t _cx, _cy;
+    int16_t _rx, _ry;
     uint16_t _color;
     bool _consumed;
     DrawEllipseFluent(GUI *g) : _gui(g), _cx(0), _cy(0), _rx(0), _ry(0), _color(0), _consumed(false) {}
-    DrawEllipseFluent &at(int16_t cx, int16_t cy)
+    ~DrawEllipseFluent() { draw(); }
+    DrawEllipseFluent &pos(int16_t cx, int16_t cy)
     {
         PIPGUI_FLUENT_GUARD(DrawEllipseFluent);
         _cx = cx;
@@ -566,11 +578,13 @@ struct DrawEllipseFluent
 struct FillEllipseFluent
 {
     GUI *_gui;
-    int16_t _cx, _cy, _rx, _ry;
+    int16_t _cx, _cy;
+    int16_t _rx, _ry;
     uint16_t _color;
     bool _consumed;
     FillEllipseFluent(GUI *g) : _gui(g), _cx(0), _cy(0), _rx(0), _ry(0), _color(0), _consumed(false) {}
-    FillEllipseFluent &at(int16_t cx, int16_t cy)
+    ~FillEllipseFluent() { draw(); }
+    FillEllipseFluent &pos(int16_t cx, int16_t cy)
     {
         PIPGUI_FLUENT_GUARD(FillEllipseFluent);
         _cx = cx;
@@ -694,7 +708,8 @@ struct DrawSquircleFluent
     uint16_t _color;
     bool _consumed;
     DrawSquircleFluent(GUI *g) : _gui(g), _cx(0), _cy(0), _r(0), _color(0), _consumed(false) {}
-    DrawSquircleFluent &at(int16_t cx, int16_t cy)
+    ~DrawSquircleFluent() { draw(); }
+    DrawSquircleFluent &pos(int16_t cx, int16_t cy)
     {
         PIPGUI_FLUENT_GUARD(DrawSquircleFluent);
         _cx = cx;
@@ -724,7 +739,8 @@ struct FillSquircleFluent
     uint16_t _color;
     bool _consumed;
     FillSquircleFluent(GUI *g) : _gui(g), _cx(0), _cy(0), _r(0), _color(0), _consumed(false) {}
-    FillSquircleFluent &at(int16_t cx, int16_t cy)
+    ~FillSquircleFluent() { draw(); }
+    FillSquircleFluent &pos(int16_t cx, int16_t cy)
     {
         PIPGUI_FLUENT_GUARD(FillSquircleFluent);
         _cx = cx;

@@ -1,4 +1,4 @@
-﻿#include <pipGUI/core/api/pipGUI.hpp>
+#include <pipGUI/core/api/pipGUI.hpp>
 #include <pipGUI/core/utils/Colors.hpp>
 #include <math.h>
 
@@ -354,10 +354,6 @@ namespace pipgui
                 top += sb;
             else if (_status.pos == Bottom)
                 bottom -= sb;
-            else if (_status.pos == Left)
-                left += sb;
-            else if (_status.pos == Right)
-                right -= sb;
         }
         if (right - left <= 0 || bottom - top <= 0)
             return;
@@ -544,10 +540,6 @@ namespace pipgui
                 top += _status.height;
             else if (_status.pos == Bottom)
                 bottom -= _status.height;
-            else if (_status.pos == Left)
-                left += _status.height;
-            else if (_status.pos == Right)
-                right -= _status.height;
         }
         if (right - left <= 0 || bottom - top <= 0)
             return;
@@ -556,7 +548,7 @@ namespace pipgui
         int16_t usableH = bottom - top;
 
         fillRect()
-            .at(left, top)
+            .pos(left, top)
             .size(usableW, (int16_t)(bottom - top))
             .color(_render.bgColor)
             .draw();
@@ -717,7 +709,7 @@ namespace pipgui
                     if (subPx == 0)
                         subPx = (uint16_t)((titlePx * 7U) / 10U);
                     if (gapPx == 0)
-                        gapPx = (uint16_t)(titlePx / 3U);
+                        gapPx = (uint16_t)(titlePx / 5U);
                 }
                 else
                 {
@@ -778,5 +770,4 @@ namespace pipgui
         }
     }
 }
-
 

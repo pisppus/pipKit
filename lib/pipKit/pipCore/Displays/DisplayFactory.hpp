@@ -3,11 +3,13 @@
 #include <pipCore/Platforms/GuiDisplay.hpp>
 
 #if !defined(PIPCORE_DISPLAY)
+#if __has_include(<pipCore/Displays/ST7789/Display.hpp>)
 #define PIPCORE_DISPLAY ST7789
+#endif
 #endif
 
 #ifndef PIPCORE_DISPLAY
-#error "Display not selected. Define PIPCORE_DISPLAY (e.g., -DPIPCORE_DISPLAY=NAME)"
+#error "Display not selected. Define PIPCORE_DISPLAY (e.g., -DPIPCORE_DISPLAY=NAME) or ensure target macro (ST7789, ILI9341, etc.) is defined"
 #endif
 
 #if PIPCORE_DISPLAY == ST7789

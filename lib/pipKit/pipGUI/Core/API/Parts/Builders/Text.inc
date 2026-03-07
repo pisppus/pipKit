@@ -27,7 +27,9 @@ struct DrawTextFluent
     {
     }
 
-    DrawTextFluent &at(int16_t x, int16_t y)
+    ~DrawTextFluent() { draw(); }
+
+    DrawTextFluent &pos(int16_t x, int16_t y)
     {
         PIPGUI_FLUENT_GUARD(DrawTextFluent);
         _x = x;

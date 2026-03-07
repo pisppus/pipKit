@@ -1,4 +1,3 @@
-#include <math.h>
 #include <pipGUI/core/api/pipGUI.hpp>
 #include <pipGUI/core/utils/Colors.hpp>
 #include <pipGUI/core/Render/Draw/Blend.hpp>
@@ -41,12 +40,27 @@ namespace pipgui
         if (stride <= 0 || maxH <= 0)
             return;
 
+        uint16_t renderSizePx = sizePx;
+        int16_t inset = 0;
+        if (iconId == psdf_icons::IconErrorLayer0)
+        {
+            // The triangle warning/error glyph has a larger visual footprint than the circular one.
+            // Shrink it slightly so all icons look equal when placed in the same square.
+            renderSizePx = (uint16_t)((sizePx * 86U) / 100U);
+            if (renderSizePx == 0)
+                renderSizePx = 1;
+            inset = (int16_t)((int32_t)sizePx - (int32_t)renderSizePx) / 2;
+        }
+
         const int16_t rx = (x == -1) ? AutoX((int32_t)sizePx) : x;
         const int16_t ry = (y == -1) ? AutoY((int32_t)sizePx) : y;
 
-        int16_t ix0 = rx, iy0 = ry;
-        int16_t ix1 = rx + (int16_t)sizePx;
-        int16_t iy1 = ry + (int16_t)sizePx;
+        const int16_t drawX = (int16_t)(rx + inset);
+        const int16_t drawY = (int16_t)(ry + inset);
+
+        int16_t ix0 = drawX, iy0 = drawY;
+        int16_t ix1 = drawX + (int16_t)renderSizePx;
+        int16_t iy1 = drawY + (int16_t)renderSizePx;
 
         if (ix1 <= 0 || iy1 <= 0 || ix0 >= stride || iy0 >= maxH)
             return;
@@ -59,7 +73,7 @@ namespace pipgui
         if (iy1 > maxH)
             iy1 = maxH;
 
-        const float distanceScale = (float)psdf_icons::DistanceRange * ((float)sizePx / (float)psdf_icons::NominalSizePx);
+        const float distanceScale = (float)psdf_icons::DistanceRange * ((float)renderSizePx / (float)psdf_icons::NominalSizePx);
         const float weightBias = _typo.psdfWeightBias;
         const float kScale = distanceScale * (1.f / 255.f);
         const float kOffset = 0.5f - distanceScale * 0.5f + weightBias;
@@ -72,11 +86,11 @@ namespace pipgui
         const uint16_t fgNative = pipcore::Sprite::swap16(fg565);
         pipcore::GuiPlatform *plat = platform();
 
-        const int32_t duFP = (int32_t)((float)ic.w / (float)sizePx * 65536.f);
-        const int32_t dvFP = (int32_t)((float)ic.h / (float)sizePx * 65536.f);
+        const int32_t duFP = (int32_t)((float)ic.w / (float)renderSizePx * 65536.f);
+        const int32_t dvFP = (int32_t)((float)ic.h / (float)renderSizePx * 65536.f);
 
-        const int32_t u0FP = (int32_t)((float)ic.x * 65536.f) + (int32_t)(((float)(ix0 - rx) + 0.5f) / (float)sizePx * (float)ic.w * 65536.f);
-        const int32_t v0FP = (int32_t)((float)ic.y * 65536.f) + (int32_t)(((float)(iy0 - ry) + 0.5f) / (float)sizePx * (float)ic.h * 65536.f);
+        const int32_t u0FP = (int32_t)((float)ic.x * 65536.f) + (int32_t)(((float)(ix0 - drawX) + 0.5f) / (float)renderSizePx * (float)ic.w * 65536.f);
+        const int32_t v0FP = (int32_t)((float)ic.y * 65536.f) + (int32_t)(((float)(iy0 - drawY) + 0.5f) / (float)renderSizePx * (float)ic.h * 65536.f);
 
         int32_t vFP = v0FP;
         for (int16_t py = iy0; py < iy1; ++py, vFP += dvFP)
@@ -124,7 +138,7 @@ namespace pipgui
         _flags.renderToSprite = 1;
         _render.activeSprite = &_render.sprite;
 
-        fillRect().at(rx - pad, ry - pad).size(sizePx + pad * 2, sizePx + pad * 2).color(bg565).draw();
+        fillRect().pos(rx - pad, ry - pad).size(sizePx + pad * 2, sizePx + pad * 2).color(bg565).draw();
         drawIconInternal(iconId, rx, ry, sizePx, fg565);
 
         _flags.renderToSprite = prevRender;

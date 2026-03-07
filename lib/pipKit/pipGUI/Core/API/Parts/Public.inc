@@ -228,75 +228,15 @@ void updateText(
     uint16_t bg565, TextAlign align = Left);
 
 // List Menu
-void configureListMenu(
-    uint8_t screenId, uint8_t parentScreen,
-    std::initializer_list<ListMenuItemDef> items);
+ConfigureListFluent configureList(uint8_t screenId, std::initializer_list<ListItemDef> items) { return ConfigureListFluent(this, screenId, items); }
 
-template <size_t N>
-void configureListMenu(
-    uint8_t screenId, uint8_t parentScreen,
-    const ListMenuItemDef (&items)[N]) { configureListMenu(screenId, parentScreen, items, static_cast<uint8_t>(N)); }
-
-void setListMenuStyle(
-    uint8_t screenId, uint32_t cardColor,
-    uint32_t cardActiveColor, uint8_t spacing = 8,
-    uint8_t radius = 8, int16_t cardWidth = 0,
-    int16_t cardHeight = 0, uint16_t titleFontPx = 0,
-    uint16_t subtitleFontPx = 0, uint16_t lineGapPx = 0,
-    ListMenuMode mode = Cards);
-
-void setListMenuStyle(
-    uint8_t screenId, uint16_t cardColor565,
-    uint16_t cardActiveColor565, uint8_t spacing = 8,
-    uint8_t radius = 8, int16_t cardWidth = 0,
-    int16_t cardHeight = 0, uint16_t titleFontPx = 0,
-    uint16_t subtitleFontPx = 0, uint16_t lineGapPx = 0,
-    ListMenuMode mode = Cards)
-{
-    setListMenuStyle(screenId,
-                     detail::color565To888(cardColor565),
-                     detail::color565To888(cardActiveColor565),
-                     spacing, radius, cardWidth, cardHeight,
-                     titleFontPx, subtitleFontPx, lineGapPx,
-                     mode);
-}
-
-void renderListMenu(uint8_t screenId);
-
-void renderListMenu(
+bool updateList(uint8_t screenId);
+bool updateList(
     uint8_t screenId, int16_t x,
     int16_t y, int16_t w,
-    int16_t h, uint32_t bgColor);
+    int16_t h, uint16_t bgColor565);
 
-void renderListMenu(
-    uint8_t screenId, int16_t x,
-    int16_t y, int16_t w,
-    int16_t h, uint16_t bgColor565)
-{
-    renderListMenu(screenId, x, y, w, h, detail::color565To888(bgColor565));
-}
-
-bool updateListMenu(uint8_t screenId);
-
-bool updateListMenu(
-    uint8_t screenId, int16_t x,
-    int16_t y, int16_t w,
-    int16_t h, uint32_t bgColor);
-
-bool updateListMenu(
-    uint8_t screenId, int16_t x,
-    int16_t y, int16_t w,
-    int16_t h, uint16_t bgColor565)
-{
-    return updateListMenu(screenId, x, y, w, h, detail::color565To888(bgColor565));
-}
-
-void handleListMenuInput(
-    uint8_t screenId, bool nextPressed,
-    bool prevPressed, bool nextDown,
-    bool prevDown);
-
-void invalidateListMenuCache(uint8_t screenId);
+ListInputFluent listInput(uint8_t screenId) { return ListInputFluent(this, screenId); }
 
 // Tile Menu
 void configureTileMenu(
@@ -339,10 +279,9 @@ void handleTileMenuInput(
     bool prevPressed, bool nextDown,
     bool prevDown);
 
-void invalidateTileMenuCache(uint8_t screenId);
-
 // Screen Control
 void regScreen(uint8_t id, ScreenCallback cb);
+GUI &regScreens(std::initializer_list<ScreenDef> screens);
 void setScreen(uint8_t id);
 uint8_t currentScreen() const;
 void nextScreen();
@@ -421,22 +360,6 @@ void setStatusBarCustom(StatusBarCustomCallback cb);
 int16_t statusBarHeight() const;
 void updateStatusBar();
 void renderStatusBar();
-
-void setDebugShowDirtyRects(bool enabled) { Debug::setDirtyRectEnabled(enabled); }
-
-bool debugShowDirtyRects() const { return Debug::dirtyRectEnabled(); }
-
-void setDebugDirtyRectColor(uint16_t color) { Debug::setDirtyRectColor(color); }
-
-uint16_t debugDirtyRectColor() const { return Debug::dirtyRectColor(); }
-
-void setDebugDirtyRectActiveColor(uint16_t color) { Debug::setDirtyRectActiveColor(color); }
-
-uint16_t debugDirtyRectActiveColor() const { return Debug::dirtyRectActiveColor(); }
-
-void setDebugMetrics(bool enabled);
-
-bool debugStatusBarMetrics() const { return _flags.statusBarDebugMetrics; }
 
 // Color Helpers
 static constexpr uint32_t rgb888(
