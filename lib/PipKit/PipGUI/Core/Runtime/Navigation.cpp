@@ -1,5 +1,6 @@
 #include <PipGUI/Core/GUI.hpp>
 #include <PipGUI/Core/Debug.hpp>
+#include <PipGUI/Core/Internal/ScreenRegistry.hpp>
 
 namespace pipgui
 {

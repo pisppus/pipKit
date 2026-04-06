@@ -20,6 +20,5 @@
 #include "Builders/Effects.hpp"
 #include "Builders/Widgets.hpp"
 #include "Builders/Text.hpp"
-#include "Builders/Factories.hpp"
 
 #undef PIPGUI_DEFAULT_FLUENT_MOVE

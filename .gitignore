@@ -16,6 +16,7 @@ logs/
 *.bin
 *.elf
 *.hex
+.sim/
 
 cloc-2.08.exe
 partitions_ota_littlefs_16MB.csv

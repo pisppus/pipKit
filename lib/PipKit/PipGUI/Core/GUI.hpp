@@ -17,6 +17,11 @@
 
 namespace pipgui
 {
+    class GUI;
+}
+
+namespace pipgui
+{
     struct ConfigDisplayFluent;
     struct ConfigureBacklightFluent;
     struct SetClipFluent;
@@ -865,3 +870,6 @@ namespace pipgui
 
     using InputState = GUI::InputState;
 }
+
+#include <PipGUI/Core/API/Builders.hpp>
+#include <PipGUI/Core/API/Builders/Factories.hpp>

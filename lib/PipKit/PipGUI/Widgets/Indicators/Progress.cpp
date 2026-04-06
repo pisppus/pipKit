@@ -12,10 +12,16 @@ namespace pipgui
         constexpr int16_t kSpritePad = 2;
         constexpr uint8_t kDefaultBaseBoost = 10;
         constexpr uint8_t kShimmerPeakIntensity = 110;
+        constexpr float kPi = 3.14159265358979323846f;
+        constexpr float kCircleProgressStartDeg = 32.0f;
+        constexpr float kCircleProgressGapVisibleDeg = 12.0f;
+        constexpr float kCircleProgressGapMinDeg = 20.0f;
+        constexpr float kCircleProgressGapMaxDeg = 42.0f;
 
         struct CircularProgressShimmerShader
         {
             uint16_t fillColor;
+            float fillStart;
             float fillSpan;
             float shimmerCenter;
             float halfBand;
@@ -53,6 +59,129 @@ namespace pipgui
             return static_cast<float>(clampProgressValue(value)) * 3.6f;
         }
 
+        [[nodiscard]] float circularProgressCapSweepDeg(int16_t r, uint8_t thickness) noexcept
+        {
+            if (r <= 0)
+                return 0.0f;
+
+            float capRadius = static_cast<float>(thickness) * 0.5f;
+            float centerRadius = static_cast<float>(r) - capRadius + 0.5f;
+            if (centerRadius < (capRadius + 0.5f))
+                centerRadius = capRadius + 0.5f;
+
+            float ratio = capRadius / centerRadius;
+            if (ratio > 0.98f)
+                ratio = 0.98f;
+            if (ratio < 0.0f)
+                ratio = 0.0f;
+
+            return 2.0f * asinf(ratio) * 180.0f / kPi;
+        }
+
+        [[nodiscard]] float resolveCircularProgressGapDeg(int16_t r, uint8_t thickness) noexcept
+        {
+            float gapDeg = circularProgressCapSweepDeg(r, thickness) + kCircleProgressGapVisibleDeg;
+            if (gapDeg < kCircleProgressGapMinDeg)
+                gapDeg = kCircleProgressGapMinDeg;
+            if (gapDeg > kCircleProgressGapMaxDeg)
+                gapDeg = kCircleProgressGapMaxDeg;
+            return gapDeg;
+        }
+
+        [[nodiscard]] float circularProgressMinSegmentDeg(int16_t r, uint8_t thickness) noexcept
+        {
+            float minDeg = circularProgressCapSweepDeg(r, thickness) * 0.8f + 4.0f;
+            if (minDeg < 8.0f)
+                minDeg = 8.0f;
+            return minDeg;
+        }
+
+        [[nodiscard]] float circularProgressAvailableSweep(int16_t r, uint8_t thickness) noexcept
+        {
+            const float gapDeg = resolveCircularProgressGapDeg(r, thickness);
+            const float sweep = 360.0f - (gapDeg * 2.0f);
+            return sweep > 0.0f ? sweep : 0.0f;
+        }
+
+        [[nodiscard]] float normalizeCircularSweep(float sweepDeg) noexcept
+        {
+            while (sweepDeg < 0.0f)
+                sweepDeg += 360.0f;
+            while (sweepDeg >= 360.0f)
+                sweepDeg -= 360.0f;
+            return sweepDeg;
+        }
+
+        [[nodiscard]] float circularSweepBetween(float startDeg, float endDeg) noexcept
+        {
+            float sweep = normalizeCircularSweep(endDeg) - normalizeCircularSweep(startDeg);
+            if (sweep < 0.0f)
+                sweep += 360.0f;
+            return sweep;
+        }
+
+        [[nodiscard]] float circularProgressSweepForValue(uint8_t value, int16_t r, uint8_t thickness) noexcept
+        {
+            const float availableSweep = circularProgressAvailableSweep(r, thickness);
+            return (static_cast<float>(clampProgressValue(value)) * availableSweep) / 100.0f;
+        }
+
+        struct CircularProgressSegments
+        {
+            float fillStart = kCircleProgressStartDeg;
+            float fillEnd = kCircleProgressStartDeg;
+            float fillSweep = 0.0f;
+            float gapDeg = kCircleProgressGapMinDeg;
+            float baseStart = kCircleProgressStartDeg + kCircleProgressGapMinDeg;
+            float baseEnd = kCircleProgressStartDeg - kCircleProgressGapMinDeg;
+            bool hasFill = false;
+            bool hasBase = true;
+        };
+
+        [[nodiscard]] CircularProgressSegments resolveCircularProgressSegments(float rawFillStart,
+                                                                              float fillSweep,
+                                                                              int16_t r,
+                                                                              uint8_t thickness) noexcept
+        {
+            CircularProgressSegments seg;
+            seg.gapDeg = resolveCircularProgressGapDeg(r, thickness);
+            const float minSegmentDeg = circularProgressMinSegmentDeg(r, thickness);
+            const float availableSweep = circularProgressAvailableSweep(r, thickness);
+
+            seg.fillStart = normalizeCircularSweep(rawFillStart);
+            if (fillSweep < 0.0f)
+                fillSweep = 0.0f;
+            if (fillSweep > availableSweep)
+                fillSweep = availableSweep;
+
+            seg.fillSweep = fillSweep;
+            seg.hasFill = fillSweep >= minSegmentDeg;
+            seg.fillEnd = seg.fillStart + fillSweep;
+
+            if (seg.hasFill)
+            {
+                const float baseSweep = 360.0f - fillSweep - (seg.gapDeg * 2.0f);
+                seg.baseStart = seg.fillEnd + seg.gapDeg;
+                seg.baseEnd = seg.fillStart - seg.gapDeg;
+                seg.hasBase = baseSweep >= minSegmentDeg;
+            }
+            else
+            {
+                seg.fillEnd = seg.fillStart;
+                seg.baseStart = kCircleProgressStartDeg + seg.gapDeg;
+                seg.baseEnd = kCircleProgressStartDeg - seg.gapDeg;
+                seg.hasBase = (360.0f - seg.gapDeg * 2.0f) >= minSegmentDeg;
+            }
+
+            return seg;
+        }
+
+        [[nodiscard]] CircularProgressSegments resolveCircularProgressSegments(uint8_t value, int16_t r, uint8_t thickness) noexcept
+        {
+            const float fillSweep = circularProgressSweepForValue(value, r, thickness);
+            return resolveCircularProgressSegments(kCircleProgressStartDeg, fillSweep, r, thickness);
+        }
+
         [[nodiscard]] uint8_t shimmerIntensity(float dist, float halfSpan) noexcept
         {
             if (halfSpan <= 0.0f)
@@ -71,7 +200,7 @@ namespace pipgui
             if (shader.segmentCount <= 0 || shader.segmentSpan <= 0.0f)
                 return shader.fillColor;
 
-            float clampedDeg = deg;
+            float clampedDeg = circularSweepBetween(shader.fillStart, deg);
             if (clampedDeg < 0.0f)
                 clampedDeg = 0.0f;
             if (clampedDeg >= shader.fillSpan)
@@ -397,7 +526,7 @@ namespace pipgui
         {
             value = clampProgressValue(value);
             String percent;
-            percent.reserve(5);
+            (void)percent.reserve(5);
             percent += String((int)value);
             percent += "%";
             drawProgressAttachedText(rx, ry, w, h, fillLeft, fillRight, baseColor, fillColor, percent, percentColor, percentAlign, percentFontPx);
@@ -516,39 +645,35 @@ namespace pipgui
         if (!getDrawTarget())
             return;
 
-        drawArc(cx, cy, r, thickness, 0.0f, 360.0f, baseColor);
-
         if (anim == Indeterminate)
         {
             const uint32_t now = nowMs();
-            const float p = static_cast<float>(now % kIndeterminatePeriodMs) / static_cast<float>(kIndeterminatePeriodMs);
-            const float eased = detail::motion::smoothstep(p);
-
             const float segDeg = 70.0f;
-            const float pos = eased * 360.0f;
-            const float startDeg = pos - segDeg * 0.5f;
-            const float endDeg = pos + segDeg * 0.5f;
+            const float p = static_cast<float>(now % kIndeterminatePeriodMs) / static_cast<float>(kIndeterminatePeriodMs);
+            const float turn = detail::motion::smoothstep(p);
+            const float startDeg = normalizeCircularSweep(kCircleProgressStartDeg + turn * 360.0f);
+            const CircularProgressSegments seg = resolveCircularProgressSegments(startDeg, segDeg, r, thickness);
+            if (seg.hasBase)
+                drawArc(cx, cy, r, thickness, seg.baseStart, seg.baseEnd, baseColor);
 
-            drawArc(cx, cy, r, thickness, startDeg, endDeg, fillColor);
+            drawArc(cx, cy, r, thickness, seg.fillStart, seg.fillEnd, fillColor);
             return;
         }
 
-        if (value == 0)
+        const CircularProgressSegments seg = resolveCircularProgressSegments(value, r, thickness);
+        if (seg.hasBase)
+            drawArc(cx, cy, r, thickness, seg.baseStart, seg.baseEnd, baseColor);
+
+        if (!seg.hasFill)
             return;
 
-        float fillSpan = fillSpanForValue(value);
+        float fillSpan = seg.fillSweep;
         if (fillSpan <= 0.0f)
             return;
 
-        if (fillSpan >= 359.5f)
-        {
-            drawArc(cx, cy, r, thickness, 0.0f, 360.0f, fillColor);
-            return;
-        }
-
         if (anim == ProgressAnimNone)
         {
-            drawArc(cx, cy, r, thickness, 0.0f, fillSpan, fillColor);
+            drawArc(cx, cy, r, thickness, seg.fillStart, seg.fillEnd, fillColor);
             return;
         }
 
@@ -565,13 +690,14 @@ namespace pipgui
 
             const CircularProgressShimmerShader shader{
                 fillColor,
+                seg.fillStart,
                 fillSpan,
                 -bandW * 0.5f + shift,
                 bandW * 0.5f,
                 fillSpan / static_cast<float>(segmentCount),
                 segmentCount};
 
-            drawArcShaded(cx, cy, r, thickness, 0.0f, fillSpan,
+            drawArcShaded(cx, cy, r, thickness, seg.fillStart, seg.fillEnd,
                           circularProgressShimmerColorAtAngle, &shader,
                           true, false);
         }

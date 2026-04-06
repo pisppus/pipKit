@@ -1,7 +1,5 @@
 #pragma once
 
-#include <PipGUI/Core/GUI.hpp>
-
 namespace pipgui
 {
     inline DrawRectFluent GUI::drawRect() { return DrawRectFluent(this); }
