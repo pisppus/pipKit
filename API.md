@@ -22,9 +22,10 @@ build_flags =
 
 - `PIPCORE_DISPLAY`
   - пример: `#define PIPCORE_DISPLAY ST7789`
-  - поддерживаемые дисплеи: `ST7789`, `ILI9488`
+  - поддерживаемые дисплеи: `ST7789`, `ILI9488`, `SIMULATOR`
 - `PIPCORE_PLATFORM`
   - пример: `#define PIPCORE_PLATFORM ESP32`
+  - поддерживаемые платформы: `ESP32`, `DESKTOP`
 - `PIPCORE_ENABLE_PREFS`
   - `0` или `1`
 - `PIPCORE_ENABLE_WIFI`
@@ -67,9 +68,128 @@ build_flags =
 
 ---
 
-# 2. Инициализация
+# 2. Desktop simulator
 
-## 2.1. Конфигурация дисплея
+Симулятор нужен для локального прогона GUI на Windows без ESP32 и физического дисплея.
+Он собирает проект в desktop-конфигурации и подменяет platform/display layer на `DESKTOP + SIMULATOR`.
+
+Запуск:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\sim-run.ps1
+```
+
+Полезные варианты:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\sim-run.ps1 -Debug
+powershell -ExecutionPolicy Bypass -File .\tools\sim-run.ps1 -NoRun
+```
+
+Что делает script:
+
+- собирает native desktop-версию в `.sim/`
+- по умолчанию сразу запускает `pipgui-sim.exe`
+- при `-Debug` собирает debug-вариант `pipgui-sim-debug.exe`
+- при `-NoRun` только собирает exe без запуска
+- если симулятор уже запущен, script сначала останавливает прошлый процесс и потом пересобирает новый
+
+Что важно по окружению:
+
+- сейчас simulator-tooling рассчитан на Windows
+- нужен установленный Visual Studio C++ toolchain (`Desktop development with C++`)
+- для simulator build `PipCore` сначала пытается подключить `config_sim.hpp`, а если его нет, использует обычный `config.hpp`
+- host-обвязка simulator-а живёт внутри `PipCore/Host/Desktop/`
+
+## 2.1. Build-time флаги simulator
+
+- `PIPGUI_SIM_SCALE`
+  - масштаб окна simulator относительно логического framebuffer
+  - по умолчанию `1`
+- `PIPGUI_SIM_DEFAULT_WIDTH`
+  - fallback-ширина simulator display, если проект не вызвал `configDisplay().size(...)`
+  - по умолчанию `320`
+- `PIPGUI_SIM_DEFAULT_HEIGHT`
+  - fallback-высота simulator display, если проект не вызвал `configDisplay().size(...)`
+  - по умолчанию `240`
+- `PIPGUI_SIM_BTN_PREV_PIN`
+  - какой virtual pin считать кнопкой `Prev`
+  - по умолчанию `4`
+- `PIPGUI_SIM_BTN_NEXT_PIN`
+  - какой virtual pin считать кнопкой `Next`
+  - по умолчанию `20`
+- `PIPGUI_SIM_BTN_SELECT_PIN`
+  - какой virtual pin считать кнопкой `Select`
+  - по умолчанию `21`
+
+Пример:
+
+```cpp
+#define PIPCORE_PLATFORM DESKTOP
+#define PIPCORE_DISPLAY SIMULATOR
+
+#define PIPGUI_SIM_SCALE 2
+#define PIPGUI_SIM_DEFAULT_WIDTH 320
+#define PIPGUI_SIM_DEFAULT_HEIGHT 240
+#define PIPGUI_SIM_BTN_PREV_PIN 4
+#define PIPGUI_SIM_BTN_NEXT_PIN 20
+#define PIPGUI_SIM_BTN_SELECT_PIN 21
+```
+
+## 2.2. Управление в окне simulator
+
+- `Left` или `A` - кнопка `Prev`
+- `Right` или `D` - кнопка `Next`
+- `Enter` или `Space` - кнопка `Select`
+- `F1` - перезапуск simulator-процесса
+- `F2` - сохранить PNG-скриншот в `.sim/shots/`
+- `F3` - начать/остановить запись видео в `.sim/videos/`
+- клавиши `0..3` отправляются в serial input simulator-а как обычные символы
+
+Ограничения и отличия от железа:
+
+- это desktop runtime, а не cycle-accurate эмулятор ESP32
+- timing, ввод и системные backend-ы могут отличаться от реального устройства
+- screenshot/video hotkeys simulator-а работают отдельно от встроенной screenshot-системы `PipGUI`
+- в simulator config по умолчанию выключены `PIPGUI_WIFI`, `PIPGUI_OTA` и built-in screenshots, даже если core-level backend оставлен включённым для совместимости сборки
+
+## 2.3. Структура host-layer
+
+Desktop simulator сейчас состоит из трёх частей:
+
+- `PipCore/Platforms/Desktop` - desktop platform/runtime backend
+- `PipCore/Displays/Simulator` - display driver, который рисует framebuffer в desktop runtime
+- `PipCore/Host/Desktop` - host-обвязка для запуска Arduino-style app на ПК
+
+Что лежит в `PipCore/Host/Desktop`:
+
+- `include/Compat.hpp` - основной desktop compat-layer для Arduino-style API (`String`, `Serial`, `millis()`, `delay()` и т.д.)
+- `include/Arduino.h` - тонкий wrapper для совместимости с обычным `#include <Arduino.h>`
+- `src/Globals.cpp` - desktop-глобалы compat-layer (`Serial`, `ESP`)
+- `src/Runner.cpp` - desktop entrypoint, который вызывает `setup()` и потом крутит `loop()`
+
+## 2.4. Что нужно проекту для симуляции
+
+Если проект пишет графику через `PipCore` / `PipGUI`, для simulator обычно достаточно следующего:
+
+- `config_sim.hpp`, где выбраны `PIPCORE_PLATFORM DESKTOP` и `PIPCORE_DISPLAY SIMULATOR`
+- host include path, чтобы компилятор видел `PipCore/Host/Desktop` compat-layer
+- desktop build script или CMake, который собирает:
+  - код `PipCore`
+  - код самого проекта
+  - `PipCore/Host/Desktop/src/Runner.cpp`
+  - `PipCore/Host/Desktop/src/Globals.cpp`
+
+Что важно:
+
+- если UI-код опирается только на `PipCore` / `PipGUI`, этого достаточно для графической симуляции
+- если проект использует прямые ESP32-only вызовы, для них всё равно нужны desktop stub/compat-реализации или абстракция через `PipCore`
+
+---
+
+# 3. Инициализация
+
+## 3.1. Конфигурация дисплея
 
 Полный пример:
 
@@ -122,7 +242,7 @@ ui.configDisplay()
     .size(320, 480);
 ```
 
-## 2.2. Запуск GUI
+## 3.2. Запуск GUI
 
 После конфигурации дисплея вызывается `begin()`:
 
@@ -160,7 +280,7 @@ ui.rotationTransitionActive();    // идёт ли сейчас анимация
 - `screenRotation()` возвращает текущий runtime rotation `0..3`
 - `rotationTransitionActive()` позволяет не запускать свой второй переход поверх уже идущего переворота
 
-## 2.3. Подсветка и яркость
+## 3.3. Подсветка и яркость
 
 ```cpp
 ui.setBacklight()
@@ -224,7 +344,7 @@ ui.setBacklightHandler(myBacklight);
 
 ---
 
-# 3. Логотип
+# 4. Логотип
 
 ```cpp
 ui.showLogo()
@@ -248,9 +368,9 @@ ui.showLogo()
 
 ---
 
-# 4. Базовые helpers
+# 5. Базовые helpers
 
-## 4.1. Размеры
+## 5.1. Размеры
 
 ```cpp
 ui.screenWidth();   // ширина вашего экрана
@@ -260,7 +380,7 @@ ui.screenHeight();  // высота вашего экрана
 - `screenWidth()` и `screenHeight()` возвращают уже активный логический размер экрана
 - удобно для центровки, адаптивных отступов и расчёта layout без хардкода
 
-## 4.2. Цвет
+## 5.2. Цвет
 
 ```cpp
 ui.rgb(255, 255, 255);
@@ -283,7 +403,7 @@ Error;   // #FF0048
 
 - их можно передавать в `color(...)`, `fillColor(...)`, `bgColor(...)` и другие места, где ожидается `RGB565`
 
-## 4.3. Очистка экрана
+## 5.3. Очистка экрана
 
 ```cpp
 ui.clear(ui.rgb(0, 0, 0));
@@ -291,7 +411,7 @@ ui.clear(ui.rgb(0, 0, 0));
 
 - очищает весь текущий draw target указанным цветом
 
-## 4.4. Клип
+## 5.4. Клип
 
 ```cpp
 ui.setClip()
@@ -307,7 +427,7 @@ ui.clearClip();
 - удобно для локальных redraw, списков, анимаций и виджетов в карточках
 - `clearClip()` возвращает обычную отрисовку без ограничений
 
-## 4.5. Наследование стиля fluent
+## 5.5. Наследование стиля fluent
 
 У fluent-объектов есть `derive()`. Это позволяет собрать базовый стиль один раз, а потом сделать на его основе несколько вариантов без копирования всей цепочки.
 
@@ -333,7 +453,7 @@ compact
 
 После `derive()` исходный fluent становится шаблоном и сам больше не коммитится. Рисуется уже производная цепочка или финальная донастройка исходного объекта.
 
-## 4.6. Adaptive preview
+## 5.6. Adaptive preview
 
 ```cpp
 ui.setAdaptivePreview(240, 135, 7200);
@@ -346,7 +466,7 @@ ui.clearAdaptivePreview();
 - это не замена `configDisplay().size(...)` и не перенастройка самой панели: физический дисплей остаётся тем же, меняется только логический viewport GUI
 - `clearAdaptivePreview()` выключает этот режим и возвращает обычный размер экрана
 
-# 5. Layout helpers
+# 6. Layout helpers
 
 Это лёгкие helper-ы для раскладки UI без тяжёлой layout-системы.
 
@@ -358,7 +478,7 @@ UiRect   rect{0, 0, 240, 320};
 UiInsets insets{10, 10, 10, 10};
 ```
 
-## 5.1. Slicing API
+## 6.1. Slicing API
 
 ```cpp
 UiRect root{0, 0, 240, 320};
@@ -381,7 +501,7 @@ UiRect content = work;
 - `placeInside(...)`
 - `centerIn(...)`
 
-## 5.2. Flow API
+## 6.2. Flow API
 
 ```cpp
 UiSize sizes[3] = {{40, 20}, {60, 20}, {40, 20}};
@@ -399,7 +519,7 @@ flowColumn(area, sizes, out, 3, 8, Center, Center);
 - `layout::SpaceBetween`
 - `layout::SpaceEvenly`
 
-## 5.3. Cursor-based API
+## 6.3. Cursor-based API
 
 ```cpp
 UiFlowRow<3> row(area, 10, layout::SpaceEvenly, Center);
@@ -424,9 +544,9 @@ row.finish();
 - `Left`, `Center`, `Right`
 - `Top`, `Bottom`
 
-# 6. Текст, шрифты и иконки
+# 7. Текст, шрифты и иконки
 
-## 6.1. Встроенные шрифты
+## 7.1. Встроенные шрифты
 
 Текущий шрифт настраивается отдельными методами:
 
@@ -463,7 +583,7 @@ ui.fontSize();    // текущий размер шрифта
 ui.fontWeight();  // текущая толщина шрифта
 ```
 
-## 6.2. Текстовые стили
+## 7.2. Текстовые стили
 
 ```cpp
 ui.setTextStyle(H1);
@@ -478,7 +598,7 @@ ui.setTextStyle(H1);
 - `Body` - основной текст интерфейса
 - `Caption` - мелкие подписи и пояснения
 
-## 6.3. Обычный текст
+## 7.3. Обычный текст
 
 ```cpp
 ui.drawText()
@@ -506,7 +626,7 @@ ui.updateText()
 - `drawText()` рисует текст как есть
 - `updateText()` сначала очищает прошлую область и потом рисует новое значение на том же месте
 
-## 6.4. Бегущая строка и многоточие
+## 7.4. Бегущая строка и многоточие
 
 ```cpp
 ui.drawTextMarquee()
@@ -536,7 +656,7 @@ ui.drawTextEllipsized()
 
 `drawTextEllipsized()` обрезает строку по `width(...)` и добавляет многоточие
 
-## 6.5. Иконки
+## 7.5. Иконки
 
 ### Обычные иконки берутся из набора `IconId`
 
@@ -627,7 +747,7 @@ ui.updateAnimIcon()
 
 ---
 
-# 7. Фигуры
+# 8. Фигуры
 
 ```cpp
 ui.drawRect()
@@ -644,7 +764,7 @@ ui.drawRect()
 - `border(widthPx, color565)` — задаёт контур; если не вызывать, контура не будет
 - `fill(...)` и `border(...)` можно использовать вместе или по отдельности
 
-## 7.1 Линия 
+## 8.1 Линия 
 
 ```cpp
 ui.drawLine()
@@ -654,7 +774,7 @@ ui.drawLine()
     .color(ui.rgb(255, 255, 255))      // цвет линии
 ```
 
-## 7.2 Прямоугольник
+## 8.2 Прямоугольник
 
 ```cpp
 ui.drawRect()
@@ -666,7 +786,7 @@ ui.drawRect()
     .border(1, ui.rgb(255, 255, 255))     // толщина и цвет контура
 ```
 
-## 7.3 Круг
+## 8.3 Круг
 
 ```cpp
 ui.drawCircle()
@@ -676,7 +796,7 @@ ui.drawCircle()
     .border(1, ui.rgb(255, 255, 255))     // толщина и цвет контура
 ```
 
-## 7.4 Эллипс
+## 8.4 Эллипс
 
 ```cpp
 ui.drawEllipse()
@@ -687,7 +807,7 @@ ui.drawEllipse()
     .border(1, ui.rgb(255, 255, 255))     // толщина и цвет контура
 ```
 
-## 7.5 Треугольник
+## 8.5 Треугольник
 
 ```cpp
 ui.drawTriangle()
@@ -699,7 +819,7 @@ ui.drawTriangle()
     .border(1, ui.rgb(255, 255, 255))     // толщина и цвет контура
 ```
 
-## 7.6 Дуга
+## 8.6 Дуга
 
 ```cpp
 ui.drawArc()
@@ -712,7 +832,7 @@ ui.drawArc()
 ```
 У дуги концы всегда скруглённые, а диапазон `0..360` рисует полный круг.
 
-## 7.7 Сквиркль
+## 8.7 Сквиркль
 
 ```cpp
 ui.drawSquircleRect()
@@ -724,11 +844,11 @@ ui.drawSquircleRect()
     .border(1, ui.rgb(255, 255, 255))     // толщина и цвет контура
 ```
 
-# 8. Градиенты
+# 9. Градиенты
 
 У всех градиентов `pos(...)` и `size(...)` задают прямоугольную область рисования.
 
-## 8.1. Вертикальный
+## 9.1. Вертикальный
 
 ```cpp
 ui.gradientVertical()
@@ -740,7 +860,7 @@ ui.gradientVertical()
 
 - цвет плавно меняется сверху вниз
 
-## 8.2. Горизонтальный
+## 9.2. Горизонтальный
 
 ```cpp
 ui.gradientHorizontal()
@@ -752,7 +872,7 @@ ui.gradientHorizontal()
 
 - цвет плавно меняется слева направо
 
-## 8.3. Диагональный
+## 9.3. Диагональный
 
 ```cpp
 ui.gradientDiagonal()
@@ -764,7 +884,7 @@ ui.gradientDiagonal()
 
 - плавный переход по диагонали от верхнего левого к нижнему правому углу
 
-## 8.4. 4 угла
+## 9.4. 4 угла
 
 ```cpp
 ui.gradientCorners()
@@ -778,7 +898,7 @@ ui.gradientCorners()
 
 - каждая вершина прямоугольника получает свой цвет, внутри идёт двунаправленная интерполяция между четырьмя углами
 
-## 8.5. Радиальный
+## 9.5. Радиальный
 
 ```cpp
 ui.gradientRadial()
@@ -794,9 +914,9 @@ ui.gradientRadial()
 - `radius(...)` задаёт радиус перехода
 - `innerColor(...)` и `outerColor(...)` задают цвета в центре и на периферии
 
-# 9. Эффекты
+# 10. Эффекты
 
-## 9.1. Blur
+## 10.1. Blur
 
 ```cpp
 ui.drawBlur()
@@ -833,7 +953,7 @@ ui.updateBlur()
 
 То есть blur остаётся тем же, а меняется только то, как поверх него распределяется tinted-слой.
 
-## 9.2. Glow
+## 10.2. Glow
 
 Круг:
 
@@ -859,9 +979,9 @@ ui.drawGlowCircle()
 
 ---
 
-# 10. Экраны и цикл
+# 11. Экраны и цикл
 
-## 10.1. Регистрация экранов
+## 11.1. Регистрация экранов
 
 Экраны регистрируются через макрос `SCREEN(name, order)`:
 
@@ -896,7 +1016,7 @@ SCREEN(ScreenSettings, 1)
 ui.setScreen(ScreenHome);
 ```
 
-## 10.2. Основной цикл
+## 11.2. Основной цикл
 
 Базовый вариант:
 
@@ -1012,7 +1132,7 @@ InputState input = ui.pollInput(Next, Prev, Select);
 ui.consumeAutoNav();
 ```
 
-## 10.3. Управление экранами
+## 11.3. Управление экранами
 
 Эти методы управляют активным экраном и переходами между экранами.
 
@@ -1030,7 +1150,7 @@ ui.screenTransitionActive();   // показывает, что переход м
 - библиотека сама ведёт history переходов между экранами (для `backScreen()`)
 - если экран меняется через `setScreen(...)`, текущий экран добавляется в history автоматически
 
-## 10.4. Принудительная перерисовка
+## 11.4. Принудительная перерисовка
 
 ```cpp
 ui.requestRedraw();
@@ -1038,7 +1158,7 @@ ui.requestRedraw();
 
 Нужно, когда данные экрана изменились вне обычного render-flow, и вы хотите гарантированно перерисовать следующий кадр.
 
-## 10.5. Анимация переходов
+## 11.5. Анимация переходов
 
 ```cpp
 ui.setScreenAnim(SlideX, 250);
@@ -1054,9 +1174,9 @@ ui.setScreenAnim(SlideX, 250);
 
 ---
 
-# 11. Статус-бар
+# 12. Статус-бар
 
-## 11.1. Build-time флаги
+## 12.1. Build-time флаги
 
 - `PIPGUI_STATUS_BAR`
   - `1` включает код статус-бара
@@ -1067,7 +1187,7 @@ ui.setScreenAnim(SlideX, 250);
 
 Обычно эти флаги задаются в `include/config.hpp`.
 
-## 11.2. Включение
+## 12.2. Включение
 
 ```cpp
 ui.configStatusBar()
@@ -1086,7 +1206,7 @@ ui.configStatusBar()
 - `Solid` — обычная непрозрачная полоса; layout резервирует под неё высоту
 - `Blur` — блюр-полоса поверх контента; layout не должен откусывать под неё safe area
 
-## 11.3. Текст
+## 12.3. Текст
 
 ```cpp
 ui.setStatusBarText()
@@ -1095,7 +1215,7 @@ ui.setStatusBarText()
     .right("Wi-Fi");
 ```
 
-## 11.4. Батарея
+## 12.4. Батарея
 
 ```cpp
 ui.setStatusBarBattery(87, Numeric);
@@ -1111,7 +1231,7 @@ ui.setStatusBarBattery(-1, Hidden);
 - `WarningBar`
 - `ErrorBar`
 
-## 11.5. Кастомная дорисовка
+## 12.5. Кастомная дорисовка
 
 ```cpp
 void statusBarCustom(GUI &ui, int16_t x, int16_t y, int16_t w, int16_t h)
@@ -1139,7 +1259,7 @@ ui.renderStatusBar();
 - `statusBarHeight()` возвращает ненулевую высоту только для `Solid`
 - при `Blur` helper возвращает `0`, потому что layout не должен резервировать fixed-height safe area под blur-панель
 
-## 11.6. Иконки слотов
+## 12.6. Иконки слотов
 
 Можно повесить отдельную иконку в левый, центральный или правый слот статус-бара:
 
@@ -1185,9 +1305,9 @@ ui.clearStatusBarIcon(Right);
 
 ---
 
-# 12. Виджеты
+# 13. Виджеты
 
-## 12.1. Scroll dots
+## 13.1. Scroll dots
 
 ```cpp
 ui.drawScrollDots()
@@ -1213,7 +1333,7 @@ ui.drawScrollDots()
 
 - при `count > 7` включается оконный режим: показывается компактное окно точек с taper по краям
 
-## 12.2. Buttons
+## 13.2. Buttons
 
 Обычная отрисовка:
 
@@ -1260,7 +1380,7 @@ ui.updateButton()
 Если заданы и текст, и иконка - иконка рисуется слева от текста как единый центрированный блок. Если текст пустой, иконка рисуется по центру кнопки.
 Если задан `value(...)`, кнопка рисует встроенный progress-fill под текстом и иконкой. `loading` и `progress` одновременно не используются: progress-режим приоритетнее.
 
-## 12.3. Toggle switch
+## 13.3. Toggle switch
 
 Снаружи нужен только обычный `bool`:
 
@@ -1299,7 +1419,7 @@ ui.drawToggleSwitch()
     .activeColor(ui.rgb(21, 180, 110));
 ```
 
-## 12.4. Slider
+## 13.4. Slider
 
 Слайдер подходит для настроек вроде громкости, яркости и подобных значений.
 
@@ -1322,7 +1442,7 @@ ui.updateSlider()
 - удержание кнопки сначала двигает значение обычным шагом, потом ускоряет и частоту, и величину шага;
 - по умолчанию бегунок белый, трек темнее активной части.
 
-## 12.5. Прогресс
+## 13.5. Прогресс
 
 ```cpp
 ui.drawProgress()
@@ -1375,7 +1495,7 @@ ui.drawProgress()
 - `None` - progress статичный, без анимации
 - `Shimmer` - по заполненной части идет мягкий движущийся блик
 
-## 12.6. Круговой прогресс
+## 13.6. Круговой прогресс
 
 ```cpp
 ui.drawCircleProgress()
@@ -1401,7 +1521,7 @@ ui.updateCircleProgress()
     .anim(None);                         // тип анимации progress
 ```
 
-## 12.7. Drum roll
+## 13.7. Drum roll
 
 Горизонтальный:
 
@@ -1430,9 +1550,9 @@ ui.drawDrumRoll()
 
 ---
 
-# 13. Списки и плитки
+# 14. Списки и плитки
 
-## 13.1. Списочное меню
+## 14.1. Списочное меню
 
 Прямо в `SCREEN(...)`:
 
@@ -1468,7 +1588,7 @@ SCREEN(ScreenMainMenu, 1)
 - **3-button режим:** короткое нажатие `SELECT` открывает `targetScreen` выбранного пункта;
 - удержание `PREV` возвращает на предыдущий экран из navigation-history.
 
-## 13.2. Плиточное меню
+## 14.2. Плиточное меню
 
 Прямо в `SCREEN(...)`:
 
@@ -1504,7 +1624,7 @@ SCREEN(ScreenTiles, 2)
 - `TextOnly`
 - `TextSubtitle`
 
-## 13.3. Кастомная раскладка плиток
+## 14.3. Кастомная раскладка плиток
 
 Если обычной сетки мало, можно задать свою понятную раскладку:
 
@@ -1532,9 +1652,9 @@ ui.updateTile()
 
 ---
 
-# 14. Графики
+# 15. Графики
 
-## 14.1. Фон и сетка:
+## 15.1. Фон и сетка:
 
 ```cpp
 ui.drawGraphGrid()
@@ -1566,7 +1686,7 @@ ui.updateGraphGrid()
     .speed(1.0f);
 ```
 
-## 14.2. Линия графика:
+## 15.2. Линия графика:
 
 ```cpp
 ui.drawGraphLine()
@@ -1581,7 +1701,7 @@ ui.drawGraphLine()
 - `drawGraphLine()` добавляет новую точку в уже настроенный график
 - `updateGraphLine()` подходит для in-place обновления, когда графику нужно самому зачистить и перерисовать нужную область
 
-## 14.3. Пакетная отрисовка готового массива:
+## 15.3. Пакетная отрисовка готового массива:
 
 ```cpp
 int16_t samples[] = {10, 15, 12, 18, 20, 17};
@@ -1621,7 +1741,7 @@ ui.drawGraphGrid()
 - `Oscilloscope` использует фиксированное окно видимых samples
 - если `visible(0)`, окно для `Oscilloscope` вычисляется из `rateHz * timebaseMs`
 
-## 14.4. Пауза графиков (freeze)
+## 15.4. Пауза графиков (freeze)
 
 В **3-button режиме**, библиотека поддерживает заморозку графика:
 
@@ -1638,9 +1758,9 @@ bool toggled = ui.GraphPauseToggled();          // одноразовое соб
 - механизм включён только когда реально есть 3-я кнопка (3-button режим);
 ---
 
-# 15. Уведомления, toast, ошибки
+# 16. Уведомления, toast, ошибки
 
-## 15.1. Toast
+## 16.1. Toast
 
 ```cpp
 ui.showToast()
@@ -1665,7 +1785,7 @@ bool active = ui.toastActive();    // `true`, пока toast еще анимир
 - если не заданы и текст, и иконка, toast не показывается
 - toast сам показывается, держится на экране и затем скрывается с анимацией
 
-## 15.2. Notification
+## 16.2. Notification
 
 ```cpp
 ui.showNotification()
@@ -1688,7 +1808,7 @@ ui.showNotification()
 bool active = ui.notificationActive();
 ```
 
-## 15.3. Popup menu
+## 16.3. Popup menu
 
 Самый обычный сценарий:
 
@@ -1729,7 +1849,7 @@ if (ui.popupMenuHasResult())                      // говорит, что по
 - **2-button режим:** удержание `NEXT` подтверждает текущий пункт; удержание `PREV` закрывает меню без выбора
 - **3-button режим:** короткое нажатие `SELECT` подтверждает текущий пункт; удержание `PREV` закрывает меню без выбора
  
-## 15.4. Ошибки
+## 16.4. Ошибки
 
 ```cpp
 ui.showError()
@@ -1763,9 +1883,9 @@ ui.setErrorButtonsDown(btnNext.isDown(), btnPrev.isDown(), btnCombo.isDown());  
 
 ---
 
-# 16. Скриншоты
+# 17. Скриншоты
 
-## 16.1. Build-time флаги
+## 17.1. Build-time флаги
 
 - `PIPGUI_SCREENSHOTS`
   - `1` по умолчанию
@@ -1776,7 +1896,7 @@ ui.setErrorButtonsDown(btnNext.isDown(), btnPrev.isDown(), btnCombo.isDown());  
 
 Для режима `2` нужен LittleFS. Библиотека сама создаёт `/PipKit/`, `/PipKit/screenshots/` и `/PipKit/thumbnails/`.
 
-## 16.2. Serial capture
+## 17.2. Serial capture
 
 Скрипт на ПК:
 
@@ -1792,7 +1912,7 @@ python tools/screenshots/bin/capture.py
 python tools/screenshots/bin/capture.py --port COM9 --baud 1000000
 ```
 
-## 16.3. Flash (LittleFS)
+## 17.3. Flash (LittleFS)
 
 В режиме `2` сохраняются:
 
@@ -1801,7 +1921,7 @@ python tools/screenshots/bin/capture.py --port COM9 --baud 1000000
 
 Галерея показывает новые сверху.
 
-## 16.4. Запуск скриншота
+## 17.4. Запуск скриншота
 
 ```cpp
 bool started = ui.startScreenshot();
@@ -1811,7 +1931,7 @@ bool started = ui.startScreenshot();
 - если snapshot-buffer не удалось выделить, функция вернёт `false`
 - built-in shortcut фиксированный: удержание `Next + Prev` `300 ms`
 
-## 16.5. Галерея миниатюр
+## 17.5. Галерея миниатюр
 
 Отрисовка галереи:
 
@@ -1838,9 +1958,9 @@ uint8_t count = ui.screenshotCount();
 
 ---
 
-# 17. Wi‑Fi
+# 18. Wi‑Fi
 
-## 17.1. Build-time флаги
+## 18.1. Build-time флаги
 
 - `PIPGUI_WIFI`
   - `1` — `GUI::loop()` обслуживает standalone Wi‑Fi wrapper
@@ -1859,7 +1979,7 @@ uint8_t count = ui.screenshotCount();
 - OTA продолжает работать и при `PIPGUI_WIFI = 0`
 - у OTA свой runtime-path, он не зависит от standalone Wi‑Fi servicing в `GUI::loop()`
 
-## 17.2. API
+## 18.2. API
 
 ```cpp
 ui.requestWiFi(true);   // включить или выключить standalone Wi‑Fi request
@@ -1870,11 +1990,11 @@ ui.wifiLocalIpV4();     // IPv4 как packed uint32_t
 
 ---
 
-# 18. OTA
+# 19. OTA
 
 > Для OTA нужна A/B partition table с двумя OTA app-слотами.
 
-## 18.1. Тулинг (`tools/ota/`)
+## 19.1. Тулинг (`tools/ota/`)
 
 Сгенерировать ключ:
 
@@ -1904,7 +2024,7 @@ python tools/ota/verify.py
 
 При запуске без параметров tool покажет меню: manifest, firmware source и signature check.
 
-## 18.2. Конфигурация
+## 19.2. Конфигурация
 
 Обычно всё задаётся в `include/config.hpp`: 
 
@@ -1941,7 +2061,7 @@ python tools/ota/verify.py
 - URL и версия это то, что меняют чаще всего
 - если OTA не нужен, достаточно держать `PIPGUI_OTA 0`
 
-## 18.3. Использование
+## 19.3. Использование
 
 ### Минимальный сценарий
 

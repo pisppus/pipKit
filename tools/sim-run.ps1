@@ -38,11 +38,10 @@ $libSources = Get-ChildItem (Join-Path $root "lib\PipKit") -Recurse -Filter *.cp
 } | Sort-Object FullName
 
 $appSources = Get-ChildItem (Join-Path $root "src") -File -Filter *.cpp | Sort-Object FullName
-$simSources = Get-ChildItem (Join-Path $root "simulator\src") -File -Filter *.cpp | Sort-Object FullName
-$sources = @($libSources + $appSources + $simSources)
+$sources = @($libSources + $appSources)
 
 $headerExtensions = @(".h", ".hpp", ".inl")
-$headerFiles = Get-ChildItem (Join-Path $root "lib\PipKit"), (Join-Path $root "include"), (Join-Path $root "simulator\include") -Recurse -File |
+$headerFiles = Get-ChildItem (Join-Path $root "lib\PipKit"), (Join-Path $root "include") -Recurse -File |
     Where-Object { $headerExtensions -contains $_.Extension.ToLowerInvariant() }
 $globalDeps = @($headerFiles)
 $globalDepTicks = 0L
@@ -58,7 +57,7 @@ $commonArgs = @(
     "/EHsc",
     "/DWIN32_LEAN_AND_MEAN",
     "/DNOMINMAX",
-    "/Isimulator\include",
+    "/Ilib\PipKit\PipCore\Host\Desktop\include",
     "/Iinclude",
     "/Ilib\PipKit"
 )

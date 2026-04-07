@@ -4,4 +4,4 @@ fda319fd670dbc6b10ca0c62418bc4b9710cab9b9d0be690dbbb2ce73b36f759
 93915d4c3705fa647cda3112d8e5cbd2757fdc5c218ff3c4574a831d39b3a308
 53c57d4badc5b316757f2594a75f358b6e684441d040be6483de3c06f828439b
 76f0a4b8fa9f8795de3455098368a43ea2d30f87eb4a864caee215d0394a8110
-{"charset": "C:\\Users\\Pisppus\\Documents\\PlatformIO\\Projects\\pipGUI\\tools\\fonts\\PSDF\\WixMadeForDisplay\\charset.txt", "font": "C:\\Users\\Pisppus\\Documents\\PlatformIO\\Projects\\pipGUI\\tools\\fonts\\TTF\\WixMadeforDisplay.ttf", "potr": "1", "pxrange": "8", "size": "48", "type": "psdf"}
+{"charset": "C:\\Users\\Pisppus\\Documents\\PlatformIO\\Projects\\PipKit\\tools\\fonts\\PSDF\\WixMadeForDisplay\\charset.txt", "font": "C:\\Users\\Pisppus\\Documents\\PlatformIO\\Projects\\PipKit\\tools\\fonts\\TTF\\WixMadeforDisplay.ttf", "potr": "1", "pxrange": "8", "size": "48", "type": "psdf"}
